@@ -6,3 +6,6 @@ __pycache__/
 # Arquivos de contexto do Claude (ficam só na máquina local)
 CLAUDE.md
 HANDOFF.md
+
+# Permissões locais do Claude Code (ficam só na máquina local)
+.claude/settings.local.json
