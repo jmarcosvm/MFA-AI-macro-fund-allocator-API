@@ -2,3 +2,7 @@
 .venv
 __pycache__/
 .pytest_cache/
+
+# Arquivos de contexto do Claude (ficam só na máquina local)
+CLAUDE.md
+HANDOFF.md
