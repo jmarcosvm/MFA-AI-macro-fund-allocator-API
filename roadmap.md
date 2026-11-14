@@ -13,7 +13,7 @@ Stand-by (fora da v1): SPEC.md §7 (curva do Tesouro, cartões de contexto, EVAL
 - Commit ao final de cada rodada (ponto de retorno).
 - Todo prompt para o Claude Code segue: Contexto, Tarefa, Restrições, Critério de pronto, Saída.
 
-## R0 — Esqueleto e ambiente [ ]  (~20 min)
+## R0 — Esqueleto e ambiente [x]  (~20 min)
 Entrega: app/main.py (GET /health), app/config.py (variáveis de ambiente), requirements.txt com versões exatas, .env.example, .gitignore, tests/test_health.py.
 Pronto quando: venv + pip install ok (Python 3.15.1: se alguma biblioteca falhar, usar versão mais antiga só neste projeto), pytest passa, uvicorn responde /health. git init + commit inicial.
 
