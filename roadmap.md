@@ -41,9 +41,11 @@ Pronto quando: testes com números fixos reproduzem os valores do SPEC.md (-0,64
 Decisões (15/11/2026): desvio-padrão amostral (ddof=1); dados insuficientes ou inválidos levantam IndicadorError (mínimos: 6 pontos do IBC-Br, 64 preços do dólar; só as últimas N contam); "o que mudaria" devolve None quando já está do lado favorável (IPCA <= 4,5 ou crescimento > 0); sem arredondamento em indicators.py (fica para o contrato, R5). Limiares (0,0 e 4,5) em app/config.py. Dependência nova: pandas==3.1.1.
 Validado em 15/11/2026 (teste "internet"): IBC-Br 10 pontos; médias 110,9836 (mar-mai) e 110,2705 (jun-ago), variação -0,6425%; volatilidade do dólar 23,18% (82 preços, sem referência no SPEC); juro real ex-post 8,6209% (Selic 13,65; IPCA 4,63); ipca_precisa_cair_pp 0,13; ibcbr_proximo_mes_precisa_superar 112,23. Tudo igual ao SPEC. Os testes de Fisher projetado (7,37%) e da ida e volta rodam sem internet.
 
-## R4 — Regras [ ]  (~20 min)
+## R4 — Regras [x]  (~20 min)
 Entrega: app/rules.py: cenário (limiar 0 e 4,5%), carteira base (35/10/55; 55/20/25; 60/25/15), preferência de indexador (SPEC.md §3.5, exceção ESTAGFLACAO).
 Pronto quando: testes cobrem os 3 cenários, limites exatos e a exceção.
+Decisões (15/11/2026): retorno com Enum (Cenario, PreferenciaIndexador), carteira como dict com as chaves do contrato (cópia a cada chamada) e indexador como (preferência, avisos); crescimento comparado SEM arredondar (0,004 aparece como 0,00 no contrato, mas classifica como EXPANSAO); entradas inválidas (None, NaN, infinito, tipo errado) levantam RegraError; Selic esperada None fora de ESTAGFLACAO -> POSFIXADA com aviso; PASSO_COPOM_PP = 0,25 em app/config.py; a diferença Selic esperada - meta é arredondada a 6 casas (15,81 - 16,06 dá -0,24999999999999822 em float; sem o round() a regra falharia). Sem dependência nova.
+Verificado em 15/11/2026: suíte completa 126 passed, 3 deselected; testes sem internet (a R4 não toca a rede). Matriz 3x3 do cenário, fronteiras do indexador (13,50 PREFIXADA; 13,51 POSFIXADA; 12,75 PREFIXADA; 13,75 POSFIXADA; None POSFIXADA com aviso) e caso de hoje (ESTAGFLACAO, 0,60/0,25/0,15, POSFIXADA) passam.
 
 ## R5 — Contrato Pydantic [ ]  (~20 min)
 Entrega: app/schemas.py conforme SPEC.md §6 + validação de negócio (soma = 1,0; desvio <= 15 p.p.; sem pesos negativos).
