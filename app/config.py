@@ -63,9 +63,22 @@ class Settings(BaseSettings):
 
     GEMINI_API_KEY: str = ""
     NVIDIA_NIM_API_KEY: str = ""
+    # Nomes de modelo SEM prefixo (SPEC.md §8). LLM_PRIMARY = modelo Gemini (vai na URL);
+    # LLM_SECONDARY = id do modelo NVIDIA como aparece no catálogo. Vazio = provedor sem
+    # modelo: falha rápida com aviso e a cadeia segue.
     LLM_PRIMARY: str = ""
     LLM_SECONDARY: str = ""
     CACHE_TTL_SECONDS: int = 21600
+
+    # Cadeia de LLM (R6). Valores iniciais SEM fonte: calibrar com o teste "internet".
+    # Timeout por chamada e orçamento total da cadeia (uma tentativa por provedor, sem
+    # retry). LLM_MAX_TOKENS inclui os tokens de raciocínio do Gemini (se estourar, a
+    # resposta vem truncada e a cadeia passa ao próximo). response_format da NVIDIA fica
+    # desligado até o teste "internet" provar que o modelo escolhido o aceita.
+    LLM_TIMEOUT_SEGUNDOS: float = 25.0
+    LLM_ORCAMENTO_SEGUNDOS: float = 45.0
+    LLM_MAX_TOKENS: int = 4096
+    LLM_SECONDARY_JSON_MODE: bool = False
 
     # Coleta do BCB: janela (em dias antes de hoje) de cada série e timeout por chamada.
     # Os valores são palpite inicial; o teste "internet" valida.
