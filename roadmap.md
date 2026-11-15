@@ -1,5 +1,5 @@
 # roadmap.md — MFA (AI Macro Fund Allocator)
-Atualizado em 14/11/2026. Fonte da verdade das regras: SPEC.md. Contexto fixo: CLAUDE.md.
+Atualizado em 15/11/2026. Fonte da verdade das regras: SPEC.md. Contexto fixo: CLAUDE.md.
 Convenção: R = rodada (sprint) numerada a partir de R0. Tempos são PALPITE, não medidos.
 Status: [ ] a fazer  [~] em andamento  [x] concluída
 
@@ -32,12 +32,14 @@ Pendente [resolvido na R2.1]: CALENDARIO_COPOM só tinha R7/2027 (26-27/out/2027
 ## R2.1 — Calendário do Copom e virada da reunião [x]  (~25 min)
 Entrega: CALENDARIO_COPOM (app/config.py) com as 16 reuniões de 2026-2027 (data da decisão, 2º dia); escolher_reuniao devolve a reunião, o alvo e a distância em dias; coletar_focus aplica TOLERANCIA_REUNIAO_DIAS (padrão 60, variável de ambiente).
 Regra: reunião de decisão mais próxima de hoje + 12 meses; empate = a mais cedo; 29/fev + 12 meses = 28/fev. Distância > tolerância (ou tabela vazia): selic_esperada = null + aviso com a distância e o fim da tabela; a API não cai.
-Fontes das datas (secundárias, verificadas em 15/11/2026): Rankia (atualizada em 05/11/2026) e Tribuna do Sertão/Estadão Conteúdo (23/06/2026, divulgação do BC; só 2027). A página oficial do Banco Central NÃO foi aberta; conferir antes de confiar nas datas.
+Conferência das datas: as 16 datas do CALENDARIO_COPOM foram conferidas na página oficial do BC em 15/11/2026 (BCB Calendar, "Copom meetings Calendar", anos 2026 e 2027): as 16 reuniões batem (Dia 1 - Dia 2). Atualizar quando o BC publicar 2028 (~jun/2027).
 Validado em 15/11/2026 (teste "internet"): alvo 15/11/2027, reunião R7/2027 (27/10/2027), distância alvo -> reunião 19 dias (hoje -> reunião: 346 dias), Selic esperada mediana 12,75 (Focus de 06/11/2026), sem avisos. A virada para R8/2027 ocorre a partir de 18/11/2026; sem 2028 na tabela, a Selic esperada vira null depois de 06/02/2027 (aviso).
 
-## R3 — Indicadores (pandas) [ ]  (~25 min)
+## R3 — Indicadores (pandas) [x]  (~25 min)
 Entrega: app/indicators.py: IBC-Br (média 3m recente vs 3m anterior), volatilidade do dólar (63 dias úteis, anualizada: std dos retornos x raiz(252)), juro real ex-post e projetado (Fisher), "o que mudaria" (distâncias aos limiares).
 Pronto quando: testes com números fixos reproduzem os valores do SPEC.md (-0,64%; 8,62%; 7,37%; 0,13 p.p.; 112,23).
+Decisões (15/11/2026): desvio-padrão amostral (ddof=1); dados insuficientes ou inválidos levantam IndicadorError (mínimos: 6 pontos do IBC-Br, 64 preços do dólar; só as últimas N contam); "o que mudaria" devolve None quando já está do lado favorável (IPCA <= 4,5 ou crescimento > 0); sem arredondamento em indicators.py (fica para o contrato, R5). Limiares (0,0 e 4,5) em app/config.py. Dependência nova: pandas==3.1.1.
+Validado em 15/11/2026 (teste "internet"): IBC-Br 10 pontos; médias 110,9836 (mar-mai) e 110,2705 (jun-ago), variação -0,6425%; volatilidade do dólar 23,18% (82 preços, sem referência no SPEC); juro real ex-post 8,6209% (Selic 13,65; IPCA 4,63); ipca_precisa_cair_pp 0,13; ibcbr_proximo_mes_precisa_superar 112,23. Tudo igual ao SPEC. Os testes de Fisher projetado (7,37%) e da ida e volta rodam sem internet.
 
 ## R4 — Regras [ ]  (~20 min)
 Entrega: app/rules.py: cenário (limiar 0 e 4,5%), carteira base (35/10/55; 55/20/25; 60/25/15), preferência de indexador (SPEC.md §3.5, exceção ESTAGFLACAO).
