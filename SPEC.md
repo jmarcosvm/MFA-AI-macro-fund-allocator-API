@@ -20,7 +20,7 @@ Notas: Anaconda e Alveo são fornecedores de software de dados. Da Alveo não vi
 | IBC-Br com ajuste sazonal | 24364 | índice | mensal | 110,40624 (ago/2026) | defasagem ~2,5 meses |
 | Focus (Olinda) ExpectativasMercadoAnuais | — | % | estatística diária, publicada às segundas | IPCA 2027 mediana 4,9005; Selic 2027 mediana 12,50 (Data 06/11/2026, baseCalculo=0) | numérico; 2 linhas por data (baseCalculo 0 e 1) |
 
-Descartadas: 432 (Selic meta; devolve datas futuras; meta de 13,75% mantida pelo Copom em 04/11/2026, segundo Rankia), 11, 433.
+Descartadas: 432 (Selic meta; devolve datas futuras; meta de 13,75% mantida pelo Copom em 04/11/2026, segundo Rankia; usada na R1 com filtro data <= hoje (ver §5)), 11, 433.
 Cuidados: SGS devolve valor como texto e data dd/mm/aaaa; ordenar por data; janelas grandes dão HTTP 406 (fatiar); licença ODbL (citar fonte e data).
 Focus: relatório sai toda segunda 8h30 com dados até a sexta anterior (FAQ13 do BCB). Significado de baseCalculo 0/1 NÃO confirmado em fonte; usar 0 (mais respondentes) e declarar.
 IPCA: em 10/11 a série terminava em set/2026; em 13/11 já trazia out/2026 (uma observação).
@@ -72,7 +72,7 @@ Mecanismo: a base vem do código; o LLM pode ajustar cada classe até ±15 p.p.,
 - A preferência por prefixado ignora que a expectativa de queda já está nos preços.
 
 ## 5. Pendências
-- [pendente] Obter a meta vigente da Selic para a comparação da seção 3.5 (série 432, linha com data <= hoje; não testado).
+- [resolvido, 14/11/2026] Meta vigente da Selic: série 432 com filtro data <= hoje; valor 13,75% (data 14/11/2026), obtido no teste 'internet' da R1.
 - [pendente] Aviso obrigatório: simulação educacional, não é recomendação de investimento (risco regulatório CVM; premissa não verificada).
 - [decisão, 14/11/2026] Volatilidade do dólar: janela de 63 dias úteis, **anualizada** = desvio-padrão dos retornos diários simples (pct_change da série 1) x raiz(252), em %. Papel na v1: informativa, fora da regra do cenário.
 - [pendente] PTAX via Olinda não testada.
