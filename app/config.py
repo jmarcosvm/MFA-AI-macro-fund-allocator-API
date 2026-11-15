@@ -34,6 +34,13 @@ CALENDARIO_COPOM: dict[str, date] = {
 }
 
 
+# Limiares das regras do cenário (SPEC.md §3.2).
+# Crescimento do IBC-Br (variação %, média 3m vs 3m anteriores): sem faixa neutra.
+LIMIAR_CRESCIMENTO_IBCBR: float = 0.0
+# IPCA 12m (%): teto da banda da meta (3% ± 1,5 p.p.).
+LIMIAR_IPCA_PCT: float = 4.5
+
+
 class Settings(BaseSettings):
     """Todas as chaves e nomes de modelo são opcionais; o app sobe sem .env."""
 
