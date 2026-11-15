@@ -7,12 +7,30 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 # Calendário do Copom usado para escolher a reunião da Selic no Focus (SPEC.md §3.3).
-# Chave = nome da reunião no Olinda ("R#/aaaa"); valor = dia da decisão (2º dia).
-# Só entra aqui o que o SPEC confirma: R7/2027 = 26-27/out/2027. As demais reuniões
-# 2026-2027 (fonte citada: Rankia, 05/11/2026) devem ser acrescentadas pelo João
-# Marcos; o código não inventa datas. Atualizar uma vez por ano.
+# Chave = nome da reunião no Olinda ("R#/aaaa", ordem da reunião no ano);
+# valor = dia da DECISÃO (2º dia da reunião).
+# Fontes (secundárias), verificadas em 15/11/2026: Rankia
+# (rankia.com.br/proxima-reuniao-copom, atualizada em 05/11/2026) e Tribuna do
+# Sertão/Estadão Conteúdo (23/06/2026, divulgação do BC; só 2027).
+# ATENÇÃO: a página oficial do Banco Central NÃO foi aberta para conferir.
+# O código não inventa datas: atualizar esta tabela uma vez por ano.
 CALENDARIO_COPOM: dict[str, date] = {
+    "R1/2026": date(2026, 1, 28),
+    "R2/2026": date(2026, 3, 18),
+    "R3/2026": date(2026, 4, 29),
+    "R4/2026": date(2026, 6, 17),
+    "R5/2026": date(2026, 8, 5),
+    "R6/2026": date(2026, 9, 16),
+    "R7/2026": date(2026, 11, 4),
+    "R8/2026": date(2026, 12, 9),
+    "R1/2027": date(2027, 1, 27),
+    "R2/2027": date(2027, 3, 17),
+    "R3/2027": date(2027, 4, 28),
+    "R4/2027": date(2027, 6, 16),
+    "R5/2027": date(2027, 8, 4),
+    "R6/2027": date(2027, 9, 22),
     "R7/2027": date(2027, 10, 27),
+    "R8/2027": date(2027, 12, 8),
 }
 
 
@@ -33,6 +51,10 @@ class Settings(BaseSettings):
     JANELA_IPCA_DIAS: int = 150
     JANELA_META_SELIC_DIAS: int = 90
     BCB_TIMEOUT_SEGUNDOS: float = 10.0
+
+    # Focus: distância máxima (em dias) entre "hoje + 12 meses" e a reunião do
+    # Copom escolhida. Acima disso, a Selic esperada fica indisponível (None + aviso).
+    TOLERANCIA_REUNIAO_DIAS: int = 60
 
     # Se o arquivo .env não existir, ele é simplesmente ignorado.
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

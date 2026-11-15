@@ -39,6 +39,16 @@ class SelicEsperada(NamedTuple):
     data: date  # data do Focus
     reuniao: str  # "R#/aaaa"
     data_reuniao: date  # dia da decisão, vindo do calendário do código
+    distancia_dias: int  # |(hoje + 12 meses) - data_reuniao|, em dias
+
+
+class ReuniaoEscolhida(NamedTuple):
+    """Reunião do Copom mais próxima de hoje + 12 meses."""
+
+    reuniao: str  # "R#/aaaa"
+    data_reuniao: date
+    alvo: date  # hoje + 12 meses
+    distancia_dias: int  # |alvo - data_reuniao|, em dias
 
 
 class ResultadoFocus(NamedTuple):
@@ -68,17 +78,18 @@ def somar_meses(dia: date, meses: int) -> date:
 
 def escolher_reuniao(
     hoje: date, calendario: dict[str, date] | None = None
-) -> tuple[str, date] | None:
-    """Reunião do Copom cuja data fica mais perto de hoje + 12 meses.
+) -> ReuniaoEscolhida | None:
+    """Reunião do Copom cuja data de decisão fica mais perto de hoje + 12 meses.
 
-    Em empate, vence a mais antiga. Devolve None se o calendário estiver vazio.
+    Em empate, vence a mais cedo. Não depende da ordem do dicionário. Devolve None
+    só se o calendário estiver vazio; a tolerância é aplicada por quem chama.
     """
     calendario = CALENDARIO_COPOM if calendario is None else calendario
     if not calendario:
         return None
     alvo = somar_meses(hoje, 12)
     nome, data = min(calendario.items(), key=lambda item: (abs((item[1] - alvo).days), item[1]))
-    return nome, data
+    return ReuniaoEscolhida(nome, data, alvo, abs((data - alvo).days))
 
 
 def _buscar_mediana_recente(
@@ -159,9 +170,16 @@ def coletar_focus(
     hoje: date,
     *,
     calendario: dict[str, date] | None = None,
+    tolerancia_dias: int | None = None,
     cliente: httpx2.Client | None = None,
 ) -> ResultadoFocus:
-    """Coleta IPCA 12m e Selic esperada. Nunca levanta exceção do Focus."""
+    """Coleta IPCA 12m e Selic esperada. Nunca levanta exceção do Focus.
+
+    `tolerancia_dias` (padrão: TOLERANCIA_REUNIAO_DIAS) é a distância máxima entre
+    hoje + 12 meses e a reunião escolhida; acima dela a Selic esperada vira None.
+    """
+    if tolerancia_dias is None:
+        tolerancia_dias = get_settings().TOLERANCIA_REUNIAO_DIAS
     avisos: list[str] = []
 
     ipca = None
@@ -171,14 +189,30 @@ def coletar_focus(
         avisos.append(f"Focus indisponível para o IPCA esperado 12m ({erro.motivo}).")
 
     selic = None
-    escolhida = escolher_reuniao(hoje, calendario)
+    tabela = CALENDARIO_COPOM if calendario is None else calendario
+    escolhida = escolher_reuniao(hoje, tabela)
     if escolhida is None:
         avisos.append("Calendário do Copom vazio: Selic esperada indisponível.")
+    elif escolhida.distancia_dias > tolerancia_dias:
+        fim_nome, fim_data = max(tabela.items(), key=lambda item: item[1])
+        avisos.append(
+            "Selic esperada indisponível: a reunião mais próxima de hoje + 12 meses "
+            f"(alvo {escolhida.alvo:%d/%m/%Y}) é {escolhida.reuniao} "
+            f"({escolhida.data_reuniao:%d/%m/%Y}), a {escolhida.distancia_dias} dias; "
+            f"tolerância de {tolerancia_dias} dias. O calendário do Copom termina em "
+            f"{fim_data:%d/%m/%Y} ({fim_nome}); atualize CALENDARIO_COPOM."
+        )
     else:
-        reuniao, data_reuniao = escolhida
+        reuniao = escolhida.reuniao
         try:
             mediana = buscar_selic_reuniao(reuniao, cliente=cliente)
-            selic = SelicEsperada(mediana.valor, mediana.data, reuniao, data_reuniao)
+            selic = SelicEsperada(
+                mediana.valor,
+                mediana.data,
+                reuniao,
+                escolhida.data_reuniao,
+                escolhida.distancia_dias,
+            )
         except FocusError as erro:
             avisos.append(f"Focus indisponível para a Selic esperada ({reuniao}): {erro.motivo}.")
 
