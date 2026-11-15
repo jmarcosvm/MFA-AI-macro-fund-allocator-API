@@ -10,8 +10,8 @@ import httpx2
 import pytest
 
 from app.collectors import focus
-from app.collectors.focus import FocusError, MedianaFocus, SelicEsperada
-from app.config import get_settings
+from app.collectors.focus import FocusError, MedianaFocus, ReuniaoEscolhida, SelicEsperada
+from app.config import CALENDARIO_COPOM, get_settings
 
 HOJE = date(2026, 11, 13)
 
@@ -71,22 +71,24 @@ def test_somar_meses_ajusta_dia_inexistente():
 
 def test_escolhe_a_reuniao_mais_proxima_de_hoje_mais_12_meses():
     # alvo = 13/11/2027: R8/2027 (08/12) está a 25 dias; R7/2027 (27/10) a 17 dias.
-    assert focus.escolher_reuniao(HOJE, CALENDARIO_FALSO) == ("R7/2027", date(2027, 10, 27))
+    assert focus.escolher_reuniao(HOJE, CALENDARIO_FALSO) == ReuniaoEscolhida(
+        "R7/2027", date(2027, 10, 27), date(2027, 11, 13), 17
+    )
 
 
 def test_escolha_considera_reunioes_depois_do_alvo():
     # alvo = 01/12/2027: R8/2027 (08/12) a 7 dias; R7/2027 a 35 dias.
-    assert focus.escolher_reuniao(date(2026, 12, 1), CALENDARIO_FALSO)[0] == "R8/2027"
+    assert focus.escolher_reuniao(date(2026, 12, 1), CALENDARIO_FALSO).reuniao == "R8/2027"
 
 
 def test_escolha_na_virada_de_ano():
     # alvo = 05/01/2028; a mais próxima é R8/2027 (08/12/2027).
-    assert focus.escolher_reuniao(date(2027, 1, 5), CALENDARIO_FALSO)[0] == "R8/2027"
+    assert focus.escolher_reuniao(date(2027, 1, 5), CALENDARIO_FALSO).reuniao == "R8/2027"
 
 
 def test_empate_vence_a_reuniao_mais_antiga():
     calendario = {"RA/2027": date(2027, 11, 10), "RB/2027": date(2027, 11, 16)}  # alvo 13/11
-    assert focus.escolher_reuniao(HOJE, calendario)[0] == "RA/2027"
+    assert focus.escolher_reuniao(HOJE, calendario).reuniao == "RA/2027"
 
 
 def test_calendario_vazio_devolve_none():
@@ -96,7 +98,125 @@ def test_calendario_vazio_devolve_none():
 def test_calendario_padrao_vem_da_configuracao():
     escolhida = focus.escolher_reuniao(HOJE)
     assert escolhida is not None
-    assert escolhida[0] in focus.CALENDARIO_COPOM
+    assert escolhida.reuniao in focus.CALENDARIO_COPOM
+
+
+# --- calendário real (R2.1) e virada da reunião ----------------------------
+
+
+def test_calendario_real_tem_16_reunioes_em_ordem_e_rotulos_coerentes():
+    itens = list(CALENDARIO_COPOM.items())
+    assert len(itens) == 16
+    datas = [data for _, data in itens]
+    assert datas == sorted(datas) and len(set(datas)) == 16
+    for ano in (2026, 2027):
+        do_ano = [(nome, data) for nome, data in itens if data.year == ano]
+        assert [nome for nome, _ in do_ano] == [f"R{n}/{ano}" for n in range(1, 9)]
+    assert CALENDARIO_COPOM["R7/2027"] == date(2027, 10, 27)  # SPEC.md §3.3
+
+
+@pytest.mark.parametrize(
+    "hoje, reuniao, distancia",
+    [
+        (date(2026, 11, 15), "R7/2027", 19),
+        (date(2026, 11, 16), "R7/2027", 20),
+        (date(2026, 11, 17), "R7/2027", 21),  # empate (21 dias para cada lado): a mais cedo
+        (date(2026, 11, 18), "R8/2027", 20),
+        (date(2027, 2, 6), "R8/2027", 60),
+    ],
+)
+def test_virada_da_reuniao_no_calendario_real(hoje, reuniao, distancia):
+    escolhida = focus.escolher_reuniao(hoje)
+    assert (escolhida.reuniao, escolhida.distancia_dias) == (reuniao, distancia)
+    assert escolhida.alvo == focus.somar_meses(hoje, 12)
+
+
+def test_empate_do_dia_17_tem_mesma_distancia_nos_dois_lados():
+    alvo = date(2027, 11, 17)
+    assert (alvo - CALENDARIO_COPOM["R7/2027"]).days == (CALENDARIO_COPOM["R8/2027"] - alvo).days == 21
+
+
+def test_escolha_nao_depende_da_ordem_da_tabela():
+    desordenada = dict(sorted(CALENDARIO_COPOM.items(), key=lambda item: item[1], reverse=True))
+    assert list(desordenada) != list(CALENDARIO_COPOM)
+    for hoje in (date(2026, 11, 15), date(2026, 11, 17), date(2026, 11, 18), date(2027, 2, 6)):
+        assert focus.escolher_reuniao(hoje, desordenada) == focus.escolher_reuniao(hoje)
+
+
+def test_29_de_fevereiro_usa_28_de_fevereiro_do_ano_seguinte():
+    # 29/02/2028 + 12 meses: 29/02/2029 não existe -> alvo = 28/02/2029 (último dia do mês).
+    calendario = {"RX/2029": date(2029, 2, 20), "RY/2029": date(2029, 3, 10)}
+    escolhida = focus.escolher_reuniao(date(2028, 2, 29), calendario)
+    assert escolhida == ReuniaoEscolhida("RX/2029", date(2029, 2, 20), date(2029, 2, 28), 8)
+
+
+# --- tolerância (R2.1) ------------------------------------------------------
+
+
+def _handler_selic_conta_chamadas(chamadas):
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        chamadas.append(request.url.path)
+        if "Inflacao12Meses" in request.url.path:
+            return httpx2.Response(200, json={"value": [linha_ipca()]})
+        return httpx2.Response(200, json={"value": [linha_selic(reuniao="R8/2027")]})
+
+    return handler
+
+
+def test_no_limite_de_60_dias_a_selic_e_coletada():
+    chamadas = []
+    cliente = cliente_simulado(_handler_selic_conta_chamadas(chamadas))
+    resultado = focus.coletar_focus(date(2027, 2, 6), cliente=cliente)
+
+    assert resultado.selic_esperada is not None
+    assert resultado.selic_esperada.reuniao == "R8/2027"
+    assert resultado.selic_esperada.distancia_dias == 60
+    assert resultado.avisos == []
+
+
+def test_com_61_dias_a_selic_vira_none_com_aviso_e_nao_chama_o_olinda():
+    chamadas = []
+    cliente = cliente_simulado(_handler_selic_conta_chamadas(chamadas))
+    resultado = focus.coletar_focus(date(2027, 2, 7), cliente=cliente)
+
+    assert resultado.ipca_12m is not None
+    assert resultado.selic_esperada is None
+    assert len(chamadas) == 1 and "Inflacao12Meses" in chamadas[0]  # só o IPCA
+    (aviso,) = resultado.avisos
+    for trecho in ("61 dias", "60 dias", "R8/2027", "08/12/2027", "07/02/2028"):
+        assert trecho in aviso
+
+
+def test_tolerancia_por_parametro():
+    chamadas = []
+    cliente = cliente_simulado(_handler_selic_conta_chamadas(chamadas))
+    resultado = focus.coletar_focus(date(2027, 2, 7), tolerancia_dias=61, cliente=cliente)
+    assert resultado.selic_esperada is not None
+
+    recusada = focus.coletar_focus(date(2027, 2, 6), tolerancia_dias=59, cliente=cliente)
+    assert recusada.selic_esperada is None and "59 dias" in recusada.avisos[0]
+
+
+def test_tolerancia_por_variavel_de_ambiente(monkeypatch):
+    monkeypatch.setenv("TOLERANCIA_REUNIAO_DIAS", "70")
+    get_settings.cache_clear()
+    cliente = cliente_simulado(_handler_selic_conta_chamadas([]))
+    resultado = focus.coletar_focus(date(2027, 2, 7), cliente=cliente)
+    assert resultado.selic_esperada is not None
+
+    monkeypatch.setenv("TOLERANCIA_REUNIAO_DIAS", "10")
+    get_settings.cache_clear()
+    resultado = focus.coletar_focus(date(2027, 2, 6), cliente=cliente)
+    assert resultado.selic_esperada is None and "10 dias" in resultado.avisos[0]
+
+
+def test_aviso_de_tolerancia_informa_o_fim_da_tabela_desordenada():
+    desordenada = {"RB/2027": date(2027, 12, 8), "RA/2027": date(2027, 1, 27)}
+    resultado = focus.coletar_focus(
+        date(2030, 1, 1), calendario=desordenada, cliente=cliente_focus(ipca=[linha_ipca()])
+    )
+    assert resultado.selic_esperada is None
+    assert "termina em 08/12/2027 (RB/2027)" in resultado.avisos[0]
 
 
 # --- coleta: sucesso --------------------------------------------------------
@@ -108,7 +228,7 @@ def test_coleta_com_sucesso_devolve_valores_datas_e_reuniao():
 
     assert resultado.ipca_12m == MedianaFocus(5.0117, date(2026, 11, 6))
     assert resultado.selic_esperada == SelicEsperada(
-        12.75, date(2026, 11, 6), "R7/2027", date(2027, 10, 27)
+        12.75, date(2026, 11, 6), "R7/2027", date(2027, 10, 27), 17
     )
     assert resultado.avisos == []
 
@@ -257,7 +377,13 @@ def test_internet_coleta_focus_real():
     hoje = date.today()
     resultado = focus.coletar_focus(hoje)
 
+    escolhida = focus.escolher_reuniao(hoje)
+
     print(f"\nhoje = {hoje.isoformat()}")
+    print(f"alvo (hoje + 12 meses) = {escolhida.alvo.isoformat()}")
+    print(f"reunião escolhida = {escolhida.reuniao} (decisão em {escolhida.data_reuniao.isoformat()})")
+    print(f"distância alvo -> reunião = {escolhida.distancia_dias} dias")
+    print(f"distância hoje -> reunião = {(escolhida.data_reuniao - hoje).days} dias")
     print(f"ipca_12m: {resultado.ipca_12m}")
     print(f"selic_esperada: {resultado.selic_esperada}")
     print(f"avisos: {resultado.avisos}")

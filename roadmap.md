@@ -27,7 +27,13 @@ Validado em 14/11/2026 (teste "internet"): janelas padrão em dias, configuráve
 Entrega: app/collectors/focus.py (Olinda): IPCA 12m (Suavizada = S, baseCalculo 0) e Selic por reunião (tabela de datas do Copom 2026-2027, SPEC.md §3.3). Queda do Focus -> campo null + aviso, não derruba a API.
 Pronto quando: testes simulados passam + 1 teste "internet".
 Validado em 15/11/2026 (teste "internet"): IPCA 12m mediana 5,0117 e Selic R7/2027 mediana 12,75, ambas com Data 06/11/2026 (iguais ao SPEC). Cuidado descoberto: o Olinda responde HTTP 400 se o espaço da query vier como "+" (precisa de "%20"); há teste de regressão.
-Pendente: CALENDARIO_COPOM (app/config.py) só tem R7/2027 (26-27/out/2027, do SPEC); as demais reuniões 2026-2027 precisam ser preenchidas pelo João.
+Pendente [resolvido na R2.1]: CALENDARIO_COPOM só tinha R7/2027 (26-27/out/2027, do SPEC); as demais reuniões 2026-2027 foram preenchidas na R2.1.
+
+## R2.1 — Calendário do Copom e virada da reunião [x]  (~25 min)
+Entrega: CALENDARIO_COPOM (app/config.py) com as 16 reuniões de 2026-2027 (data da decisão, 2º dia); escolher_reuniao devolve a reunião, o alvo e a distância em dias; coletar_focus aplica TOLERANCIA_REUNIAO_DIAS (padrão 60, variável de ambiente).
+Regra: reunião de decisão mais próxima de hoje + 12 meses; empate = a mais cedo; 29/fev + 12 meses = 28/fev. Distância > tolerância (ou tabela vazia): selic_esperada = null + aviso com a distância e o fim da tabela; a API não cai.
+Fontes das datas (secundárias, verificadas em 15/11/2026): Rankia (atualizada em 05/11/2026) e Tribuna do Sertão/Estadão Conteúdo (23/06/2026, divulgação do BC; só 2027). A página oficial do Banco Central NÃO foi aberta; conferir antes de confiar nas datas.
+Validado em 15/11/2026 (teste "internet"): alvo 15/11/2027, reunião R7/2027 (27/10/2027), distância alvo -> reunião 19 dias (hoje -> reunião: 346 dias), Selic esperada mediana 12,75 (Focus de 06/11/2026), sem avisos. A virada para R8/2027 ocorre a partir de 18/11/2026; sem 2028 na tabela, a Selic esperada vira null depois de 06/02/2027 (aviso).
 
 ## R3 — Indicadores (pandas) [ ]  (~25 min)
 Entrega: app/indicators.py: IBC-Br (média 3m recente vs 3m anterior), volatilidade do dólar (63 dias úteis, anualizada: std dos retornos x raiz(252)), juro real ex-post e projetado (Fisher), "o que mudaria" (distâncias aos limiares).
