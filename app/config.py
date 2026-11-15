@@ -47,6 +47,16 @@ PASSO_COPOM_PP: float = 0.25
 # à base (SPEC.md §3.4 e §6). Os pesos são frações: 15 p.p. = 0,15.
 LIMITE_DESVIO_PP: float = 15.0
 
+# Tetos de tamanho dos textos da justificativa (R6). São proteção contra resposta
+# descontrolada, NÃO critério de qualidade; têm margem acima do que o prompt pede
+# (texto 1200, linha do resumo 160, narração 500). Sem fonte: ajustar após os testes
+# "internet". O resumo deve ter de 2 a 3 linhas não vazias (SPEC.md §8).
+TEXTO_MAX_CARACTERES: int = 2000
+RESUMO_LINHA_MAX_CARACTERES: int = 240
+NARRACAO_MAX_CARACTERES: int = 900
+RESUMO_MIN_LINHAS: int = 2
+RESUMO_MAX_LINHAS: int = 3
+
 
 class Settings(BaseSettings):
     """Todas as chaves e nomes de modelo são opcionais; o app sobe sem .env."""

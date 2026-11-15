@@ -6,7 +6,12 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from app.config import LIMITE_DESVIO_PP
+from app.config import (
+    LIMITE_DESVIO_PP,
+    NARRACAO_MAX_CARACTERES,
+    RESUMO_LINHA_MAX_CARACTERES,
+    TEXTO_MAX_CARACTERES,
+)
 from app.rules import Cenario, PreferenciaIndexador
 from app.schemas import RespostaMacro
 
@@ -63,7 +68,13 @@ EXEMPLO = {
         "limite_desvio_pp": 15,
         "renda_fixa_preferencia": "POSFIXADA",
     },
-    "justificativa": {"texto": "...", "origem": "llm", "provedor": "gemini"},
+    "justificativa": {
+        "texto": "Texto de justificativa do cenário e do ajuste.",
+        "resumo": "Cenário: ESTAGFLACAO.\nCarteira ajustada dentro do limite.",
+        "narracao_o_que_mudaria": "O IPCA precisaria cair 0,13 p.p.",
+        "origem": "llm",
+        "provedor": "gemini",
+    },
     "avisos_de_qualidade": [
         "IBC-Br com defasagem de ~2,5 meses (último ponto: agosto/2026).",
         "Focus: mediana semanal; baseCalculo não documentado (usado 0).",
@@ -81,6 +92,13 @@ def carteira(base: tuple, sugerida: tuple) -> dict:
     c["base"] = dict(zip(chaves, base))
     c["sugerida"] = dict(zip(chaves, sugerida))
     return c
+
+
+def just(**mudancas) -> dict:
+    """Justificativa válida de partida, com as mudanças pedidas."""
+    j = exemplo()["justificativa"]
+    j.update(mudancas)
+    return j
 
 
 def com(**mudancas) -> dict:
@@ -174,7 +192,7 @@ def test_preferencia_fora_do_conjunto_e_rejeitada():
 
 def test_fallback_com_sugerida_diferente_da_base_e_rejeitado():
     d = exemplo()  # sugerida != base
-    d["justificativa"] = {"texto": "modelo fixo", "origem": "fallback", "provedor": None}
+    d["justificativa"] = just(origem="fallback", provedor=None)
     with pytest.raises(ValidationError, match="fallback"):
         RespostaMacro.model_validate(d)
 
@@ -182,21 +200,21 @@ def test_fallback_com_sugerida_diferente_da_base_e_rejeitado():
 def test_fallback_com_sugerida_igual_a_base_e_aceito():
     d = exemplo()
     d["carteira"]["sugerida"] = dict(d["carteira"]["base"])
-    d["justificativa"] = {"texto": "modelo fixo", "origem": "fallback"}
+    d["justificativa"] = just(origem="fallback", provedor=None)
     assert RespostaMacro.model_validate(d).justificativa.provedor is None
 
 
 def test_fallback_com_provedor_e_rejeitado():
     d = exemplo()
     d["carteira"]["sugerida"] = dict(d["carteira"]["base"])
-    d["justificativa"] = {"texto": "x", "origem": "fallback", "provedor": "gemini"}
+    d["justificativa"] = just(origem="fallback", provedor="gemini")
     with pytest.raises(ValidationError, match="provedor"):
         RespostaMacro.model_validate(d)
 
 
 def test_llm_sem_provedor_e_rejeitado():
     d = exemplo()
-    d["justificativa"] = {"texto": "x", "origem": "llm"}
+    d["justificativa"] = just(origem="llm", provedor=None)
     with pytest.raises(ValidationError, match="provedor"):
         RespostaMacro.model_validate(d)
 
@@ -351,3 +369,77 @@ def test_zero_negativo_vira_zero_positivo_e_o_json_nao_tem_menos_zero():
     assert str(r.juro_real.ex_post_pct) == "0.0"
     assert str(r.indicadores.ibcbr.janela_anterior.media) == "0.0"
     assert "-0.0" not in r.model_dump_json()
+
+
+# ---------------------------------------------------------------- c. justificativa estendida (R6)
+
+
+def _validar_just(**mudancas):
+    d = exemplo()
+    d["justificativa"] = just(**mudancas)
+    return RespostaMacro.model_validate(d)
+
+
+def test_justificativa_estendida_aceita_resumo_de_2_e_de_3_linhas():
+    r2 = _validar_just(resumo="Linha um.\nLinha dois.")
+    r3 = _validar_just(resumo="Linha um.\nLinha dois.\nLinha três.")
+    assert r2.justificativa.resumo.count("\n") == 1
+    assert r3.justificativa.resumo.count("\n") == 2
+
+
+@pytest.mark.parametrize(
+    "resumo",
+    [
+        "Só uma linha.",
+        "Um.\nDois.\nTrês.\nQuatro.",
+        "Um.\n\n\nDois.\nTrês.\nQuatro.",
+        "Uma linha.\n   \n",
+    ],
+)
+def test_resumo_fora_de_2_a_3_linhas_e_rejeitado(resumo):
+    with pytest.raises(ValidationError, match="linhas"):
+        _validar_just(resumo=resumo)
+
+
+def test_linhas_em_branco_nao_contam_no_resumo():
+    # 2 linhas com texto e varias em branco: vale como 2.
+    assert _validar_just(resumo="Um.\n\n   \nDois.\n")
+
+
+@pytest.mark.parametrize("campo", ["texto", "resumo", "narracao_o_que_mudaria"])
+@pytest.mark.parametrize("vazio", ["", "   ", "\n\n\t "])
+def test_texto_vazio_ou_so_espacos_e_rejeitado(campo, vazio):
+    with pytest.raises(ValidationError):
+        _validar_just(**{campo: vazio})
+
+
+@pytest.mark.parametrize("campo", ["resumo", "narracao_o_que_mudaria"])
+def test_campo_novo_ausente_e_rejeitado(campo):
+    d = exemplo()
+    del d["justificativa"][campo]
+    with pytest.raises(ValidationError):
+        RespostaMacro.model_validate(d)
+
+
+def test_teto_do_texto_no_limite_aceita_e_acima_rejeita():
+    assert _validar_just(texto="a" * TEXTO_MAX_CARACTERES)
+    with pytest.raises(ValidationError, match="caracteres"):
+        _validar_just(texto="a" * (TEXTO_MAX_CARACTERES + 1))
+
+
+def test_teto_da_narracao_no_limite_aceita_e_acima_rejeita():
+    assert _validar_just(narracao_o_que_mudaria="a" * NARRACAO_MAX_CARACTERES)
+    with pytest.raises(ValidationError, match="caracteres"):
+        _validar_just(narracao_o_que_mudaria="a" * (NARRACAO_MAX_CARACTERES + 1))
+
+
+def test_teto_de_cada_linha_do_resumo():
+    ok = "a" * RESUMO_LINHA_MAX_CARACTERES
+    assert _validar_just(resumo=f"{ok}\nOutra linha.")
+    with pytest.raises(ValidationError, match="caracteres"):
+        _validar_just(resumo=f"{ok}a\nOutra linha.")
+
+
+def test_campo_desconhecido_na_justificativa_e_rejeitado():
+    with pytest.raises(ValidationError):
+        _validar_just(extra="x")

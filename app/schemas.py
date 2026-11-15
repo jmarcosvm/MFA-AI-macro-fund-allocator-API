@@ -18,6 +18,13 @@ from pydantic import (
     model_validator,
 )
 
+from app.config import (
+    NARRACAO_MAX_CARACTERES,
+    RESUMO_LINHA_MAX_CARACTERES,
+    RESUMO_MAX_LINHAS,
+    RESUMO_MIN_LINHAS,
+    TEXTO_MAX_CARACTERES,
+)
 from app.rules import Cenario, PreferenciaIndexador
 
 # Tolerância da soma dos pesos da carteira: abs(soma - 1,0) <= 1e-6.
@@ -198,8 +205,48 @@ class Carteira(_Modelo):
 
 class Justificativa(_Modelo):
     texto: str
+    resumo: str  # 2 a 3 linhas, para o topo da tela
+    narracao_o_que_mudaria: str  # prosa sobre os valores de o_que_mudaria (calculados no código)
     origem: Literal["llm", "fallback"]
     provedor: str | None = None
+
+    @field_validator("texto", "resumo", "narracao_o_que_mudaria", mode="after")
+    @classmethod
+    def _texto_nao_vazio(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("o texto não pode ser vazio")
+        return v
+
+    @field_validator("texto", mode="after")
+    @classmethod
+    def _teto_do_texto(cls, v: str) -> str:
+        if len(v) > TEXTO_MAX_CARACTERES:
+            raise ValueError(f"texto passa de {TEXTO_MAX_CARACTERES} caracteres")
+        return v
+
+    @field_validator("narracao_o_que_mudaria", mode="after")
+    @classmethod
+    def _teto_da_narracao(cls, v: str) -> str:
+        if len(v) > NARRACAO_MAX_CARACTERES:
+            raise ValueError(
+                f"narracao_o_que_mudaria passa de {NARRACAO_MAX_CARACTERES} caracteres"
+            )
+        return v
+
+    @field_validator("resumo", mode="after")
+    @classmethod
+    def _resumo_de_2_a_3_linhas(cls, v: str) -> str:
+        linhas = [linha for linha in v.splitlines() if linha.strip()]
+        if not RESUMO_MIN_LINHAS <= len(linhas) <= RESUMO_MAX_LINHAS:
+            raise ValueError(
+                f"o resumo deve ter de {RESUMO_MIN_LINHAS} a {RESUMO_MAX_LINHAS} linhas "
+                f"não vazias, recebi {len(linhas)}"
+            )
+        if any(len(linha) > RESUMO_LINHA_MAX_CARACTERES for linha in linhas):
+            raise ValueError(
+                f"cada linha do resumo deve ter no máximo {RESUMO_LINHA_MAX_CARACTERES} caracteres"
+            )
+        return v
 
     @model_validator(mode="after")
     def _provedor_conforme_origem(self) -> "Justificativa":
