@@ -439,11 +439,24 @@ def test_prompt_traz_pesos_com_ponto_decimal_e_limite():
     assert "renda_fixa 0.60 (60%)" in usuario
     assert "fundos_cambiais 0.25 (25%)" in usuario
     assert "renda_variavel 0.15 (15%)" in usuario
-    assert "15 p.p. (0.15 em fração)" in usuario
+    assert "15 p.p. (no JSON, em fração: 0.15)" in usuario
     assert "ESTAGFLACAO" in usuario and "POSFIXADA" in usuario
     assert "-0,64%" in usuario and "112,23" in usuario
     assert "0.55 significa 55%" in sistema
     assert "SOMENTE os números fornecidos" in sistema
+
+
+def test_prompt_manda_citar_pesos_como_percentual_nos_textos():
+    sistema, usuario = montar_mensagens(entrada())
+    assert "SEMPRE como percentuais" in sistema
+    assert "NUNCA como fração" in sistema
+    assert 'SOMENTE nas chaves de "carteira_sugerida" do JSON' in sistema
+    assert "exceção: os pesos da carteira" in sistema
+    # lembrete no fim da mensagem do usuário, logo antes do pedido final
+    assert "nos textos, cite os pesos só como percentuais" in usuario
+    assert usuario.index("Lembrete:") < usuario.index("Responda agora")
+    # a fração só aparece como orientação para o JSON, nunca como "em fração" solta
+    assert "0.15 em fração" not in usuario
 
 
 def test_prompt_marca_indisponivel_e_nada_a_mudar():
