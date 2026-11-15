@@ -39,6 +39,10 @@ LIMIAR_CRESCIMENTO_IBCBR: float = 0.0
 # IPCA 12m (%): teto da banda da meta (3% ± 1,5 p.p.).
 LIMIAR_IPCA_PCT: float = 4.5
 
+# Passo do Copom (p.p.): a Selic esperada precisa estar pelo menos um passo abaixo da
+# meta atual para preferir prefixados (SPEC.md §3.5).
+PASSO_COPOM_PP: float = 0.25
+
 
 class Settings(BaseSettings):
     """Todas as chaves e nomes de modelo são opcionais; o app sobe sem .env."""
