@@ -9,10 +9,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Calendário do Copom usado para escolher a reunião da Selic no Focus (SPEC.md §3.3).
 # Chave = nome da reunião no Olinda ("R#/aaaa", ordem da reunião no ano);
 # valor = dia da DECISÃO (2º dia da reunião).
-# Fontes (secundárias), verificadas em 15/11/2026: Rankia
-# (rankia.com.br/proxima-reuniao-copom, atualizada em 05/11/2026) e Tribuna do
-# Sertão/Estadão Conteúdo (23/06/2026, divulgação do BC; só 2027).
-# ATENÇÃO: a página oficial do Banco Central NÃO foi aberta para conferir.
+# As 16 datas foram conferidas na página oficial do BC em 15/11/2026 (BCB Calendar,
+# "Copom meetings Calendar", anos 2026 e 2027): as 16 reuniões batem (Dia 1 - Dia 2).
+# Atualizar quando o BC publicar 2028 (~jun/2027).
 # O código não inventa datas: atualizar esta tabela uma vez por ano.
 CALENDARIO_COPOM: dict[str, date] = {
     "R1/2026": date(2026, 1, 28),
