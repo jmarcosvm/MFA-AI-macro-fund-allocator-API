@@ -1,8 +1,19 @@
 """Configuração lida de variáveis de ambiente (e de um .env opcional)."""
 
+from datetime import date
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# Calendário do Copom usado para escolher a reunião da Selic no Focus (SPEC.md §3.3).
+# Chave = nome da reunião no Olinda ("R#/aaaa"); valor = dia da decisão (2º dia).
+# Só entra aqui o que o SPEC confirma: R7/2027 = 26-27/out/2027. As demais reuniões
+# 2026-2027 (fonte citada: Rankia, 05/11/2026) devem ser acrescentadas pelo João
+# Marcos; o código não inventa datas. Atualizar uma vez por ano.
+CALENDARIO_COPOM: dict[str, date] = {
+    "R7/2027": date(2027, 10, 27),
+}
 
 
 class Settings(BaseSettings):
