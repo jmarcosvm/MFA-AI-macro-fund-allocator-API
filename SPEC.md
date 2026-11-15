@@ -79,7 +79,7 @@ Mecanismo: a base vem do código; o LLM pode ajustar cada classe até ±15 p.p.,
 
 ## 6. Contrato de saída (JSON) [decisão, 14/11/2026]
 Escopo v1 = opção A: só o núcleo. Campos abaixo; os valores do exemplo são os de 13/11/2026, exceto `carteira.sugerida` (hipotética, ilustra o ajuste do LLM).
-Regras do contrato (validadas com Pydantic): soma de `carteira.sugerida` = 1,0; cada classe desvia no máximo `limite_desvio_pp` da `base`; se o LLM falhar ou violar, `justificativa.origem = "fallback"` e `sugerida = base`.
+Regras do contrato (validadas com Pydantic): soma de `carteira.sugerida` = 1,0; cada classe desvia no máximo `limite_desvio_pp` da `base`; se o LLM falhar ou violar, `justificativa.origem = "fallback"` e `sugerida = base`. `justificativa` tem `texto`, `resumo` e `narracao_o_que_mudaria` (todos texto não vazio; `resumo` = 2 a 3 linhas não vazias; com tetos de tamanho como proteção, em `app/config.py`), `origem` ("llm" | "fallback") e `provedor` (preenchido se "llm"; `null` se "fallback"). No fallback, os três textos vêm de modelo fixo montado só com os números calculados.
 
 ```json
 {
@@ -126,7 +126,13 @@ Regras do contrato (validadas com Pydantic): soma de `carteira.sugerida` = 1,0; 
     "limite_desvio_pp": 15,
     "renda_fixa_preferencia": "POSFIXADA"
   },
-  "justificativa": {"texto": "...", "origem": "llm", "provedor": "gemini"},
+  "justificativa": {
+    "texto": "...",
+    "resumo": "Linha 1 do resumo.\nLinha 2 do resumo.",
+    "narracao_o_que_mudaria": "...",
+    "origem": "llm",
+    "provedor": "gemini"
+  },
   "avisos_de_qualidade": [
     "IBC-Br com defasagem de ~2,5 meses (último ponto: agosto/2026).",
     "Focus: mediana semanal; baseCalculo não documentado (usado 0)."
@@ -144,8 +150,8 @@ Campos com `null` no exemplo (Selic efetiva, meta Selic, dólar, volatilidade, d
 
 ## 8. Decisões de arquitetura [decisão, 14/11/2026]
 - Demo **hospedada** (link público). Hospedagem: **Render** (plano gratuito, Docker), em um **segundo workspace** ("My Workspace 2", criado em 14/11/2026) separado do IFO V1; plano do novo workspace a conferir no Billing; horas gratuitas são por workspace (render.com/docs/free); termos sobre múltiplos workspaces não lidos. Fatos oficiais (render.com/docs/free, 14/11/2026): dorme após 15 min sem tráfego; volta em ~1 min; 750 h/mês; disco efêmero; "não usar em produção". Mitigação: tela de carregamento no front + pré-aquecer o cache ao iniciar. Ping externo para não dormir: não verificado nos termos; evitar por ora.
-- Camada de LLM: **LiteLLM** (prefixos `gemini/` e `nvidia_nim/`), versão travada no requirements. Cadeia: Gemini (principal) -> NVIDIA NIM (reserva) -> resultado determinístico sem LLM. OpenRouter fora da v1.
-- Nomes de modelo em variáveis de ambiente (não fixos no código). Gemini estáveis em 14/11/2026: gemini-3.6-flash, gemini-3.5-flash-lite. Modelo da NVIDIA: escolher no catálogo "Free Endpoint" na hora de construir (muda com frequência).
+- Camada de LLM [decisão, 15/11/2026, substitui a decisão de 14/11/2026 de usar LiteLLM]: **chamadas diretas às APIs com httpx2** (já travado no requirements; nenhuma dependência nova), uma função isolada por provedor. Cadeia: Gemini (principal; REST `generateContent`, chave no header `x-goog-api-key`) -> NVIDIA NIM (reserva; `POST /v1/chat/completions`, chave em `Authorization: Bearer`) -> resultado determinístico sem LLM. A cadeia é um laço nosso (erro de API, timeout, truncamento, JSON inválido ou violação do contrato passam ao próximo). Motivo da troca: o litellm 1.109.1 (publicado em 11/11/2026, sem proveniência assinada) traria 41 pacotes novos, rebaixaria o python-dateutil e rodaria no mesmo processo que lê as chaves, com histórico de comprometimento de versões em 03/2026 (relato do João); memória medida no Windows (relato): 97 MB base, 269 MB após importar, 284 MB após uma chamada simulada. OpenRouter fora da v1.
+- Nomes de modelo em variáveis de ambiente (não fixos no código): `LLM_PRIMARY` = nome puro do modelo Gemini e `LLM_SECONDARY` = id do modelo NVIDIA como aparece no catálogo, sem prefixos. Gemini estáveis em 14/11/2026: gemini-3.6-flash, gemini-3.5-flash-lite. Modelo da NVIDIA: escolher no catálogo "Free Endpoint" na hora de construir (muda com frequência).
 - Cache da resposta por algumas horas, **em memória** (perdido quando o servidor dorme/reinicia; aceitável: reconstruir = 1 coleta + 1 chamada ao LLM).
 - Validação em duas camadas: formato (Pydantic) e regras de negócio (soma = 1,0; desvio <= 15 p.p. por classe). Falhou -> próximo provedor -> fallback.
 - Limitações: limites do plano gratuito do Gemini não verificados; NVIDIA free registra entradas/saídas e termos para demo pública não lidos (blogs e página comunitária, não oficial); Brasil como país suportado pela NVIDIA não confirmado.
