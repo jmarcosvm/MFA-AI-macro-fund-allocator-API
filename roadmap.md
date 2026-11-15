@@ -23,9 +23,11 @@ Cuidados: valores vêm como texto; datas dd/mm/aaaa; ordenar por data; janelas g
 Pronto quando: testes com respostas simuladas passam; 1 teste marcado "internet" roda localmente e traz dados reais.
 Validado em 14/11/2026 (teste "internet"): janelas padrão em dias, configuráveis em app/config.py: IBC-Br 365 (10 pontos), dólar 120 (83), Selic efetiva 60 (42), IPCA 150 (5; 60 dias traria só ~2), meta Selic 90 (linha com data <= hoje: 13,75). Timeout 10 s por chamada.
 
-## R2 — Coleta Focus [ ]  (~25 min)
+## R2 — Coleta Focus [x]  (~25 min)
 Entrega: app/collectors/focus.py (Olinda): IPCA 12m (Suavizada = S, baseCalculo 0) e Selic por reunião (tabela de datas do Copom 2026-2027, SPEC.md §3.3). Queda do Focus -> campo null + aviso, não derruba a API.
 Pronto quando: testes simulados passam + 1 teste "internet".
+Validado em 15/11/2026 (teste "internet"): IPCA 12m mediana 5,0117 e Selic R7/2027 mediana 12,75, ambas com Data 06/11/2026 (iguais ao SPEC). Cuidado descoberto: o Olinda responde HTTP 400 se o espaço da query vier como "+" (precisa de "%20"); há teste de regressão.
+Pendente: CALENDARIO_COPOM (app/config.py) só tem R7/2027 (26-27/out/2027, do SPEC); as demais reuniões 2026-2027 precisam ser preenchidas pelo João.
 
 ## R3 — Indicadores (pandas) [ ]  (~25 min)
 Entrega: app/indicators.py: IBC-Br (média 3m recente vs 3m anterior), volatilidade do dólar (63 dias úteis, anualizada: std dos retornos x raiz(252)), juro real ex-post e projetado (Fisher), "o que mudaria" (distâncias aos limiares).
