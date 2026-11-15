@@ -61,7 +61,16 @@ Achados da NVIDIA (15/11/2026): o formato OpenAI (POST /v1/chat/completions, Aut
 Resultado: pytest padrão 304 passed, 6 deselected (sem internet e sem chave); pip check ok; requirements.txt sem mudança; PR #11. Testes internet (saída crua colada pelo João, 15/11/2026, duas execuções, 3 passed in 12.78s e 3 passed in 15.51s): Gemini 2,31 s e 6,02 s; NVIDIA 4,75 s e 4,56 s; JSON válido nas duas; response_format da NVIDIA aceito (5,55 s e 4,70 s).
 Nota para a R7: httpx2.Client é síncrono; o endpoint deve ser def (executado em thread) ou chamar a cadeia numa thread.
 
-## R7 — Cache e endpoint [ ]  (~25 min)
+## R7.1 — Pipeline (app/service.py) [x]
+Entrega: gerar_resposta(agora, *, cliente, coletores, focus, analisar) -> RespostaMacro; sem cache, rota nem threads (R7.2). Hoje = data em UTC-3 fixo (sem horário de verão desde 2019: conhecimento geral, não verificado). BCB falhando ou sem dados -> ServicoIndisponivelError (a R7.2 vira 503 ou cache antigo); Focus e LLM seguem com None/fallback.
+Decisões: coleta sequencial; um httpx2.Client compartilhado; avisos gerados dos dados (IBC-Br, nota do Focus, Focus, regra, LLM), sem aviso de defasagem para IPCA/dólar (SPEC não define limiar); AVISO_FIXO e FUSO_BRASIL em service.py.
+Resultado (15/11/2026): pytest -q 332 passed, 7 deselected; 28 casos em tests/test_service.py (fixture do IBC-Br sintética, 10 pontos); requirements.txt sem mudança; commits 1f13189 (feat) e 5e1d647 (test).
+Teste "internet" (saída colada pelo João): 1 passed in 4,51 s; pipeline 3,89 s, medido uma vez (Gemini); origem llm; números iguais ao SPEC §6.
+Avisos reais: IBC-Br ~2,5 meses (ago/2026) e nota do Focus de 06/11/2026.
+Observação: meta_selic_aa.data é a data da última linha da série 432 (hoje), não a da decisão do Copom (inferência; série diária não confirmada).
+Pior caso nominal 115 s (50 BCB + 20 Focus + 45 LLM), calculado de config.py, não medido.
+
+## R7.2 — Cache e endpoint [ ]  (~25 min)
 Entrega: app/cache.py (TTL, padrão 6 h) e GET /api/v1/macro/analyze completo; CORS; "desatualizado" quando o BCB falha e há cache antigo; pré-aquecer cache ao iniciar.
 Pronto quando: resposta bate com o contrato; 2a chamada vem do cache.
 
