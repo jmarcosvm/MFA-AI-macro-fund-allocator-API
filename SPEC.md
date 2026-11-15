@@ -100,6 +100,7 @@ Regras do contrato (validadas com Pydantic): soma de `carteira.sugerida` = 1,0; 
   },
   "indicadores": {
     "selic_efetiva_aa": {"valor": null, "data": null, "fonte": "BCB SGS 1178"},
+    "meta_selic_aa": {"valor": null, "data": null, "fonte": "BCB SGS 432"},
     "ipca_12m": {"valor": 4.63, "data": null, "fonte": "BCB SGS 13522"},
     "dolar_venda": {"valor": null, "data": null, "fonte": "BCB SGS 1"},
     "volatilidade_dolar_63d_anualizada_pct": {"valor": null, "data": null, "fonte": "calculado sobre BCB SGS 1"},
@@ -132,7 +133,7 @@ Regras do contrato (validadas com Pydantic): soma de `carteira.sugerida` = 1,0; 
   ]
 }
 ```
-Campos com `null` no exemplo (Selic, dólar, volatilidade, datas) serão preenchidos pelo código na coleta; não os inventei.
+Campos com `null` no exemplo (Selic efetiva, meta Selic, dólar, volatilidade, datas) serão preenchidos pelo código na coleta; não os inventei. A `meta_selic_aa` entrou no contrato por decisão de 15/11/2026: a regra do indexador (§3.5) compara a Selic esperada com ela, e o contrato mostra contra o quê a comparação foi feita.
 
 ## 7. Stand-by (fora da v1; implementar depois, nesta ordem sugerida)
 1. Curva de juros do Tesouro Direto (Tesouro Transparente CSV): inflação implícita vs IPCA esperado do Focus; taxa prefixada vs Selic média esperada; decide PREFIXADO / IPCA+ / PÓS. A regra 3.5 vira fallback.

@@ -43,6 +43,10 @@ LIMIAR_IPCA_PCT: float = 4.5
 # meta atual para preferir prefixados (SPEC.md §3.5).
 PASSO_COPOM_PP: float = 0.25
 
+# Desvio máximo (em pontos percentuais) de cada classe da carteira sugerida em relação
+# à base (SPEC.md §3.4 e §6). Os pesos são frações: 15 p.p. = 0,15.
+LIMITE_DESVIO_PP: float = 15.0
+
 
 class Settings(BaseSettings):
     """Todas as chaves e nomes de modelo são opcionais; o app sobe sem .env."""
