@@ -80,8 +80,16 @@ CORS: GET de outra origem (localhost:8000 -> 127.0.0.1:8000) liberado; PUT bloqu
 Limitações: 40 vagas no pool de threads (anyio 4.16.0); espera sem limite (limite do Render não verificado); durante queda do BCB cada requisição nova paga uma tentativa; cache só em memória.
 Observação: o gerador padrão é resolvido em criar_app() (gerador or service.gerar_resposta), não por chamada. TTL do fallback (900 s) sem fonte, configurável.
 
-## R8 — Docker e deploy [ ]  (~30 min)
-Entrega: Dockerfile, medir memória do container, serviço no Render ("My Workspace 2", plano Hobby), variáveis de ambiente no painel.
+## R8.1 — Container [x]  (~30 min)
+Entrega: Dockerfile e .dockerignore na raiz (um único uvicorn, sem --workers; PORT padrão 10000, escuta em 0.0.0.0).
+Resultado (16/11/2026): python:3.15.1-slim-bookworm; 440 MB em disco (99,7 MB de conteúdo); build 60,4 s; contexto 87 kB. Roda como mfa (uid 10001); sem segredos na imagem (find e docker history); 383 passed, 8 deselected; requirements.txt, app/ e tests/ intocados.
+Com --memory=512m --cpus=0.1 (aproximação local, sem fonte, do plano grátis; 3 despertares, container novo): /health 200 em 15,94 a 23,26 s; 1º analyze 200 em 20,65 a 28,63 s; 2º analyze 4,4 a 4,8 ms, mesmo gerado_em; pico ~88 MiB; OOMKilled=false. docker stop 2,41 a 2,92 s, código 0. Sem PORT escuta na 10000.
+Pior dia: --network none = /health 200 e /analyze 503; sem chaves = 200 origem fallback; --read-only --tmpfs /tmp = 200.
+Pendente (fora desta rodada): o detalhe do 503 trouxe texto do sistema em inglês ("[Errno -3] Temporary failure in name resolution"); melhorar em app/collectors/bcb.py.
+Limitações: pytest vai na imagem (requirements.txt não muda); sem pin de digest; a medição é local e NÃO prova que o BCB responde ao IP do Render nem informa o limite de requisição do Render.
+
+## R8.2 — Deploy no Render [ ]  (do João)
+Passos: (1) New > Web Service > Git Provider, repositório privado (o Render precisa de acesso pelo app do GitHub), Language = Docker, Dockerfile na raiz, workspace "My Workspace 2", plano Free (conferir no Billing). (2) Variáveis de ambiente no painel, como secretas: GEMINI_API_KEY, NVIDIA_NIM_API_KEY, LLM_PRIMARY, LLM_SECONDARY (CORS_ORIGINS fica "*" até a R9). (3) Advanced: health check path /health. (4) Deploy. (5) Testar /health e /api/v1/macro/analyze na URL pública, medir o despertar frio após 15 min parado e verificar que o BCB responde ao IP do Render. (6) Fechar CORS_ORIGINS no domínio do front na R9.
 Pronto quando: URL pública responde /health e /api/v1/macro/analyze.
 
 ## R9 — Interface (v0) [ ]  (~1 h)
