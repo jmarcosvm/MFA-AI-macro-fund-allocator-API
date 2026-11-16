@@ -88,12 +88,18 @@ Pior dia: --network none = /health 200 e /analyze 503; sem chaves = 200 origem f
 Pendente (fora desta rodada): o detalhe do 503 trouxe texto do sistema em inglês ("[Errno -3] Temporary failure in name resolution"); melhorar em app/collectors/bcb.py.
 Limitações: pytest vai na imagem (requirements.txt não muda); sem pin de digest; a medição é local e NÃO prova que o BCB responde ao IP do Render nem informa o limite de requisição do Render.
 
-## R8.2 — Deploy no Render [ ]  (do João)
+## R8.2 — Deploy no Render [x]  (do João)
 Passos: (1) New > Web Service > Git Provider, repositório privado (o Render precisa de acesso pelo app do GitHub), Language = Docker, Dockerfile na raiz, workspace "My Workspace 2", plano Free (conferir no Billing). (2) Variáveis de ambiente no painel, como secretas: GEMINI_API_KEY, NVIDIA_NIM_API_KEY, LLM_PRIMARY, LLM_SECONDARY (CORS_ORIGINS fica "*" até a R9). (3) Advanced: health check path /health. (4) Deploy. (5) Testar /health e /api/v1/macro/analyze na URL pública, medir o despertar frio após 15 min parado e verificar que o BCB responde ao IP do Render. (6) Fechar CORS_ORIGINS no domínio do front na R9.
 Pronto quando: URL pública responde /health e /api/v1/macro/analyze.
+Resultado (16/11/2026): URL https://mfa-api-4u7m.onrender.com. Web Service Docker, plano Free, região Virginia (US East), workspace "My Workspace 2", health check path /health. Deploy da main (commit 13cd2ea) concluído em 55,5 s (painel do Render).
+/health 200 e /api/v1/macro/analyze 200 (cenário ESTAGFLACAO, origem llm, provedor gemini, dados reais): o BCB RESPONDE ao IP do Render.
+CORS: GET de outra origem (example.com) liberado; PUT bloqueado.
+O health check a cada 5 s NÃO impede o serviço de dormir: desligou limpo (SIGTERM, "Application shutdown complete") 15 min após a última requisição.
+Despertar frio (UMA medição, por fetch de outra origem): /health 200 JSON em 22,4 s (o Render segura a requisição, sem página intermediária para fetch); análise pronta em ~23,9 s. Doc oficial: ~1 min; painel: "50 s ou mais".
+NÃO testados: navegação direta (página de carregamento HTML), limite de tempo por requisição do Render, segunda medição do despertar.
 
 ## R9 — Interface (v0) [ ]  (~1 h)
-Entrega: tela com cenário, carteira base x sugerida, juro real ex-post x projetado, "o que mudaria", IBC-Br clicável (3 meses), avisos de qualidade, estado de carregamento ("acordando o servidor, ~1 min").
+Entrega: tela com cenário, carteira base x sugerida, juro real ex-post x projetado, "o que mudaria", IBC-Br clicável (3 meses), avisos de qualidade, estado de carregamento ("acordando o servidor, ~1 min (doc: 50 s ou mais; medido: 24 s, uma vez)").
 Pronto quando: front publicado consome a API pública.
 
 ## R10 — README e pitch [ ]  (~30 min)
