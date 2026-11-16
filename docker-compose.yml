@@ -1,0 +1,47 @@
+# MFA local com a MESMA imagem do deploy (Dockerfile da raiz). Aparece no Docker Desktop
+# como a pilha "mfa". Sem limites de recurso (para simular o plano grátis, veja
+# docker-compose.free.yml).
+#
+# Como usar (na pasta do projeto):
+#   Subir (constrói a imagem se preciso):  docker compose -p mfa up -d --build
+#   Subir com os limites do plano grátis:  docker compose -p mfa -f docker-compose.yml -f docker-compose.free.yml up -d --build
+#   Parar (mantém o container):            docker compose -p mfa stop
+#   Ligar de novo (sem recriar):           docker compose -p mfa start
+#   Remover container e rede:              docker compose -p mfa down
+#   Reconstruir depois de mudar o código:  docker compose -p mfa up -d --build
+# API em http://localhost:8000 (/health e /api/v1/macro/analyze).
+#
+# ATENÇÃO: use a porta 8000 do PC para UM só: o container OU o uvicorn local (--port 8000).
+# No Docker Desktop do Windows o compose pode subir SEM erro mesmo com a 8000 ocupada, e fica
+# difícil saber quem responde. Antes de subir o container, pare o uvicorn local. Se aparecer
+# "port is already allocated" ou erro de bind, a porta está ocupada: libere-a e rode o up de novo.
+# As chaves vêm do arquivo .env (fora do git e fora da imagem). Sem .env o app sobe em modo
+# fallback (sem LLM).
+
+name: mfa
+
+services:
+  mfa-api:
+    build: .
+    image: mfa-api:local
+    container_name: mfa-api
+    ports:
+      - "8000:10000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Garante que o app escute na 10000 mesmo que o .env tenha um PORT esquecido.
+      PORT: "10000"
+    restart: "no"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10000/health', timeout=8)"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+      start_interval: 3s
