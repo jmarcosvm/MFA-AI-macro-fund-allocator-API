@@ -98,6 +98,14 @@ O health check a cada 5 s NÃO impede o serviço de dormir: desligou limpo (SIGT
 Despertar frio (UMA medição, por fetch de outra origem): /health 200 JSON em 22,4 s (o Render segura a requisição, sem página intermediária para fetch); análise pronta em ~23,9 s. Doc oficial: ~1 min; painel: "50 s ou mais".
 NÃO testados: navegação direta (página de carregamento HTML), limite de tempo por requisição do Render, segunda medição do despertar.
 
+## R8.3 — Compose local [x]
+Entrega: docker-compose.yml (pilha "mfa", container mfa-api, imagem mfa-api:local, porta 8000->10000, healthcheck só no compose, env_file .env opcional) e docker-compose.free.yml (cpus 0.1, mem_limit 512m, start_interval 10s). Dockerfile, app/, tests/ e requirements.txt intocados.
+Resultado (16/11/2026): healthy em 20,0 s após o up (build 12,7 s); stop 0,91 s (código 0); start sem recriar, healthy em 4,2 s. Sem .env = 200 com origem fallback.
+Modo grátis: limites aplicados (NanoCpus 100000000, Memory 536870912); NÃO comparável com a R8.1, pois o healthcheck do compose roda dentro do container e disputa os 0,1 de CPU (uma medição: /health 200 em 37,7 s; 1º analyze 200 em 55,3 s; healthy em 62,1 s).
+Porta 8000 ocupada NÃO dá erro no Windows (o compose sobe sem erro): usar só um, o container OU o uvicorn local.
+Gemini caiu para a NVIDIA em 2 de 3 medições locais (1º analyze de 17,5 a 29,8 s) e em 2 de 3 ciclos stop/start do diagnóstico (30,8 e 32,1 s). Aviso literal: "Gemini indisponível (tempo esgotado); usado NVIDIA NIM." Causa não investigada.
+Uso: subir `docker compose -p mfa up -d --build`; com limites `docker compose -p mfa -f docker-compose.yml -f docker-compose.free.yml up -d --build`; parar `docker compose -p mfa stop`; ligar `docker compose -p mfa start`; remover `docker compose -p mfa down`; reconstruir após mudar o código = subir de novo.
+
 ## R9 — Interface (v0) [ ]  (~1 h)
 Entrega: tela com cenário, carteira base x sugerida, juro real ex-post x projetado, "o que mudaria", IBC-Br clicável (3 meses), avisos de qualidade, estado de carregamento ("acordando o servidor, ~1 min (doc: 50 s ou mais; medido: 24 s, uma vez)").
 Pronto quando: front publicado consome a API pública.
