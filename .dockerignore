@@ -1,0 +1,27 @@
+# Segredos
+.env
+.env.*
+
+# Git e ambiente local
+.git
+.gitignore
+.gitattributes
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+
+# Arquivos de contexto e documentação (ficam só na máquina local)
+.claude
+CLAUDE.md
+HANDOFF.md
+SPEC.md
+roadmap.md
+graphify-out
+
+# Testes e build
+tests
+pytest.ini
+Dockerfile
+.dockerignore
