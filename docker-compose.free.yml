@@ -1,0 +1,14 @@
+# Limites aproximados do plano grátis do Render (512 MB de RAM e 0,1 de CPU). Use SEMPRE junto
+# com o docker-compose.yml:
+#   Subir com limites:  docker compose -p mfa -f docker-compose.yml -f docker-compose.free.yml up -d --build
+#   Voltar ao normal:   docker compose -p mfa up -d
+#   Parar / ligar / remover: os mesmos comandos do docker-compose.yml (stop, start, down).
+# Atenção: o healthcheck do compose roda DENTRO do container e disputa a cota de 0,1 CPU
+# durante a subida; por isso o start_interval sobe para 10s neste modo.
+
+services:
+  mfa-api:
+    cpus: 0.1
+    mem_limit: 512m
+    healthcheck:
+      start_interval: 10s
