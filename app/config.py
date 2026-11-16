@@ -69,6 +69,13 @@ class Settings(BaseSettings):
     LLM_PRIMARY: str = ""
     LLM_SECONDARY: str = ""
     CACHE_TTL_SECONDS: int = 21600
+    # TTL curto para resposta com justificativa.origem == "fallback" (o LLM falhou): tenta
+    # de novo mais cedo. Valor inicial SEM fonte (15 min); ajustar conforme o uso.
+    CACHE_TTL_FALLBACK_SECONDS: int = 900
+
+    # Origens permitidas pelo CORS, separadas por vírgula. Vazio (ou só espaços) volta a
+    # "*". GET público, sem cookies. Fechar para o domínio do front na R8/R9.
+    CORS_ORIGINS: str = "*"
 
     # Cadeia de LLM (R6). Valores iniciais SEM fonte: calibrar com o teste "internet".
     # Timeout por chamada e orçamento total da cadeia (uma tentativa por provedor, sem
