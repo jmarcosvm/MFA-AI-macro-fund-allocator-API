@@ -70,9 +70,15 @@ Avisos reais: IBC-Br ~2,5 meses (ago/2026) e nota do Focus de 06/11/2026.
 Observação: meta_selic_aa.data é a data da última linha da série 432 (hoje), não a da decisão do Copom (inferência; série diária não confirmada).
 Pior caso nominal 115 s (50 BCB + 20 Focus + 45 LLM), calculado de config.py, não medido.
 
-## R7.2 — Cache e endpoint [ ]  (~25 min)
+## R7.2 — Cache e endpoint [x]  (~25 min)
 Entrega: app/cache.py (TTL, padrão 6 h) e GET /api/v1/macro/analyze completo; CORS; "desatualizado" quando o BCB falha e há cache antigo; pré-aquecer cache ao iniciar.
 Pronto quando: resposta bate com o contrato; 2a chamada vem do cache.
+Resultado (15/11/2026): pytest -q 383 passed, 8 deselected (332 + 51 novos: 7 cache, 20 orquestrador, 24 API); requirements.txt sem mudança; commits d31ed8f (feat) e f3b7dbd (test).
+Teste "internet" (saída colada pelo João): 1 passed in 5,04 s; 1º GET 3,728 s (gera), 2º GET 0,008 s (cache); origem llm, provedor gemini, gerado_em igual nas duas.
+uvicorn real (verificado via Chrome): /health 200 em 7 ms; 1º analyze 188 ms com o cache já pré-aquecido (gerado_em 15/11 23:04:42 -03:00, sem GET de analyze antes no log); 2º 11 ms, mesmo gerado_em; origem llm, provedor gemini.
+CORS: GET de outra origem (localhost:8000 -> 127.0.0.1:8000) liberado; PUT bloqueado no pré-voo.
+Limitações: 40 vagas no pool de threads (anyio 4.16.0); espera sem limite (limite do Render não verificado); durante queda do BCB cada requisição nova paga uma tentativa; cache só em memória.
+Observação: o gerador padrão é resolvido em criar_app() (gerador or service.gerar_resposta), não por chamada. TTL do fallback (900 s) sem fonte, configurável.
 
 ## R8 — Docker e deploy [ ]  (~30 min)
 Entrega: Dockerfile, medir memória do container, serviço no Render ("My Workspace 2", plano Hobby), variáveis de ambiente no painel.
