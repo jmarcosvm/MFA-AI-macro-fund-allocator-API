@@ -114,6 +114,14 @@ Simulador: 3 cenários, fronteira (IPCA 4,5; crescimento 0) e 422 conferidos no 
 Testes existentes alterados (só 2): test_bcb.py (janelas novas) e test_schemas.py (chaves novas `pontos`/`series`). O teste "internet" (tests/test_series_internet.py) não foi rodado.
 Pronto quando: as três entregas respondem no container e a suíte passa.
 
+## R9.1b — Nova tentativa em HTTP 304 no coletor do BCB [x]
+Entrega: `buscar_serie` faz até 3 chamadas só quando recebe 304 (dataInicial -0, -1 e -2 dias; dataFinal fixa); 304 nas 3 = BCBError ("HTTP 304 nas 3 tentativas"). Outros status, timeout e erro de rede: sem nova tentativa, como antes. Só app/collectors/bcb.py e tests/test_bcb_304.py.
+Resultado (17/11/2026): dólar (SGS 1) 200 d, dataInicial 01/05: 304 x3 (0 bytes); com 30/04 e 29/04: 200 x3 (138 e 139 pontos). Janela de 180 d: 200 nos 3 deslocamentos.
+Coletor com 200 d: sem retry = BCBError "HTTP 304"; com retry = ok, 138 pontos (no host e dentro do container reconstruído, após 304 real).
+Suíte: 447 passed (432 + 15), 10 deselected; o commit passa em worktree limpo.
+Log INFO "mfa.bcb" (série, nova dataInicial, n/3) é emitido, mas NÃO aparece nos logs do container: o app não configura logging (só WARNING+ saem). Decisão: manter.
+Causa do 304 NÃO confirmada (hipótese: cache do BCB por par de datas); medido só no dólar. Render não verificado.
+
 ## R9 — Interface (v0) [ ]  (~1 h)
 Entrega: tela com cenário, carteira base x sugerida, juro real ex-post x projetado, "o que mudaria", IBC-Br clicável (3 meses), avisos de qualidade, estado de carregamento ("acordando o servidor, ~1 min (doc: 50 s ou mais; medido: 24 s, uma vez)").
 Pronto quando: front publicado consome a API pública.
