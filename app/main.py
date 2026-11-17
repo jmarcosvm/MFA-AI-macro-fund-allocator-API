@@ -19,19 +19,71 @@ import time
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app import service
 from app.cache import CacheResposta
-from app.config import get_settings
+from app.config import (
+    SIM_CRESCIMENTO_MAX,
+    SIM_CRESCIMENTO_MIN,
+    SIM_IPCA_MAX,
+    SIM_IPCA_MIN,
+    SIM_SELIC_MAX,
+    SIM_SELIC_MIN,
+    get_settings,
+)
 from app.orquestrador import ServicoComCache
-from app.schemas import RespostaMacro
+from app.schemas import RespostaMacro, RespostaSimulacao
 from app.service import ServicoIndisponivelError
+from app.simulador import simular
 
 logger = logging.getLogger("mfa")
 
 MSG_ERRO_INTERNO = "Erro interno ao gerar a análise. Tente novamente em instantes."
+
+ROTA_SIMULAR = "/api/v1/macro/simulate"
+
+# Faixa aceita por parâmetro do simulador (para a mensagem do 422).
+_FAIXAS_SIMULADOR = {
+    "ipca_12m_pct": (SIM_IPCA_MIN, SIM_IPCA_MAX),
+    "crescimento_ibcbr_pct": (SIM_CRESCIMENTO_MIN, SIM_CRESCIMENTO_MAX),
+    "selic_efetiva_aa_pct": (SIM_SELIC_MIN, SIM_SELIC_MAX),
+    "selic_esperada_pct": (SIM_SELIC_MIN, SIM_SELIC_MAX),
+    "meta_selic_pct": (SIM_SELIC_MIN, SIM_SELIC_MAX),
+}
+
+
+def _num(valor: float) -> str:
+    return f"{valor:g}".replace(".", ",")
+
+
+def _mensagem_422(erro: dict) -> str:
+    tipo = erro.get("type")
+    campo = erro["loc"][-1] if erro.get("loc") else None
+    if tipo == "missing":
+        return "Parâmetro obrigatório ausente."
+    if tipo == "float_parsing":
+        return "Deve ser um número."
+    if tipo == "finite_number":
+        return "Deve ser um número finito (NaN e infinito não são aceitos)."
+    if tipo in ("greater_than_equal", "less_than_equal") and campo in _FAIXAS_SIMULADOR:
+        minimo, maximo = _FAIXAS_SIMULADOR[campo]
+        return f"Deve estar entre {_num(minimo)} e {_num(maximo)}."
+    return "Valor inválido."
+
+
+async def tratar_422(request: Request, exc: RequestValidationError):
+    """422 em português SÓ para o simulador; as demais rotas mantêm o handler padrão."""
+    if request.url.path != ROTA_SIMULAR:
+        return await request_validation_exception_handler(request, exc)
+    detalhes = [
+        {"loc": list(e["loc"]), "msg": _mensagem_422(e), "type": e["type"]} for e in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": detalhes})
 
 
 def parse_origens(texto: str) -> list[str]:
@@ -111,6 +163,35 @@ def criar_app(
         except Exception as erro:  # noqa: BLE001 - bug nosso: 500 genérico, nunca cache velho
             logger.error("Falha inesperada ao gerar a análise: %s", type(erro).__name__)
             raise HTTPException(status_code=500, detail=MSG_ERRO_INTERNO) from None
+
+    app.add_exception_handler(RequestValidationError, tratar_422)
+
+    @app.get(ROTA_SIMULAR, response_model=RespostaSimulacao)
+    async def simulador(
+        ipca_12m_pct: float = Query(
+            ..., ge=SIM_IPCA_MIN, le=SIM_IPCA_MAX, allow_inf_nan=False
+        ),
+        crescimento_ibcbr_pct: float = Query(
+            ..., ge=SIM_CRESCIMENTO_MIN, le=SIM_CRESCIMENTO_MAX, allow_inf_nan=False
+        ),
+        selic_efetiva_aa_pct: float = Query(
+            ..., ge=SIM_SELIC_MIN, le=SIM_SELIC_MAX, allow_inf_nan=False
+        ),
+        selic_esperada_pct: float | None = Query(
+            None, ge=SIM_SELIC_MIN, le=SIM_SELIC_MAX, allow_inf_nan=False
+        ),
+        meta_selic_pct: float | None = Query(
+            None, ge=SIM_SELIC_MIN, le=SIM_SELIC_MAX, allow_inf_nan=False
+        ),
+    ) -> RespostaSimulacao:
+        """Simulação determinística: sem internet, sem LLM, sem cache (async: só conta)."""
+        return simular(
+            ipca_12m_pct,
+            crescimento_ibcbr_pct,
+            selic_efetiva_aa_pct,
+            selic_esperada_pct,
+            meta_selic_pct,
+        )
 
     return app
 

@@ -135,6 +135,15 @@ def test_ida_e_volta_do_json_preserva_estrutura_e_nomes():
     r = RespostaMacro.model_validate(EXEMPLO)
     saida = json.loads(r.model_dump_json())
     # Mesmos nomes de campo e mesma estrutura do exemplo (datas em ISO).
+    # R9.1: `pontos` (em cada janela do IBC-Br) e `series` são campos novos e aditivos.
+    for janela in ("janela_recente", "janela_anterior"):
+        assert saida["indicadores"]["ibcbr"][janela].pop("pontos") == []
+    assert saida.pop("series") == {
+        "ibcbr_mensal": [],
+        "ipca_12m_mensal": [],
+        "selic_efetiva_diaria": [],
+        "dolar_diario": [],
+    }
     assert saida == EXEMPLO | {"gerado_em": saida["gerado_em"]}
     assert list(saida["indicadores"]) == list(EXEMPLO["indicadores"])
     chaves = list(saida["indicadores"])

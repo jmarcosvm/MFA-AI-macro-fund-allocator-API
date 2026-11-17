@@ -47,6 +47,9 @@ class CrescimentoIbcbr:
     meses_recente: tuple[date, ...]
     meses_anterior: tuple[date, ...]
     variacao_pct: float
+    # R9.1: valores brutos de cada janela, cronológicos (mesma ordem de `meses_*`).
+    valores_recente: tuple[float, ...] = ()
+    valores_anterior: tuple[float, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -98,7 +101,26 @@ def crescimento_ibcbr(observacoes: Sequence[_Observacao]) -> CrescimentoIbcbr:
         meses_recente=tuple(obs.data for obs in ultimas[IBCBR_PONTOS_POR_JANELA:]),
         meses_anterior=tuple(obs.data for obs in ultimas[:IBCBR_PONTOS_POR_JANELA]),
         variacao_pct=(media_recente / media_anterior - 1) * 100,
+        valores_recente=tuple(float(v) for v in recente),
+        valores_anterior=tuple(float(v) for v in anterior),
     )
+
+
+def ultimos_pontos(observacoes: Sequence[_Observacao] | None, quantidade: int) -> list[_Observacao]:
+    """As `quantidade` últimas observações VÁLIDAS, em ordem crescente de data (R9.1).
+
+    Descarta valor não finito ou não numérico (NaN, inf, None) e data repetida (vale a última
+    que apareceu). Nunca preenche: menos pontos válidos = lista menor; nada válido = [].
+    """
+    if not observacoes or quantidade <= 0:
+        return []
+    por_data: dict[date, _Observacao] = {}
+    for obs in observacoes:
+        valor = getattr(obs, "valor", None)
+        if isinstance(valor, bool) or not isinstance(valor, (int, float)) or not isfinite(valor):
+            continue
+        por_data[obs.data] = obs
+    return [por_data[d] for d in sorted(por_data)][-quantidade:]
 
 
 def volatilidade_dolar_anualizada(observacoes: Sequence[_Observacao]) -> float:

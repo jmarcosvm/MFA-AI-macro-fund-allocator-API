@@ -85,10 +85,10 @@ def test_calcula_janela_com_hoje_fixo():
 
 def test_funcoes_por_serie_usam_a_janela_padrao_de_cada_uma():
     esperado = {
-        bcb.buscar_ibcbr: (24364, 365),
-        bcb.buscar_dolar_venda: (1, 120),
-        bcb.buscar_selic_efetiva: (1178, 60),
-        bcb.buscar_ipca_12m: (13522, 150),
+        bcb.buscar_ibcbr: (24364, 480),  # R9.1: ampliadas para o bloco `series`
+        bcb.buscar_dolar_venda: (1, 200),
+        bcb.buscar_selic_efetiva: (1178, 90),
+        bcb.buscar_ipca_12m: (13522, 400),
     }
     for funcao, (codigo, dias) in esperado.items():
         vistas = []

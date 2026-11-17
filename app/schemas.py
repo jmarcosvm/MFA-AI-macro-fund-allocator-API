@@ -109,9 +109,19 @@ class IndicadorCalculado(Indicador):
     _arred = _arredonda("valor", casas=2)
 
 
+class PontoSerie(_Modelo):
+    """Ponto de série (R9.1): data ISO e valor, SEM arredondar."""
+
+    data: date
+    valor: float = _Num
+
+
 class JanelaIbcbr(_Modelo):
     media: float = _Num
     meses: list[str]
+    # R9.1: os valores mensais da janela (3, cronológicos). A média deles bate com `media`
+    # a menos do arredondamento de 4 casas (diferença <= 5e-5).
+    pontos: list[PontoSerie] = Field(default_factory=list)
 
     _arred = _arredonda("media", casas=4)
 
@@ -130,6 +140,23 @@ class Indicadores(_Modelo):
     dolar_venda: Indicador
     volatilidade_dolar_63d_anualizada_pct: IndicadorCalculado
     ibcbr: IbcbrIndicador
+
+
+class SeriesMacro(_Modelo):
+    """Séries para gráficos (R9.1): data crescente, sem arredondar; vazia se indisponível."""
+
+    ibcbr_mensal: list[PontoSerie] = Field(default_factory=list)
+    ipca_12m_mensal: list[PontoSerie] = Field(default_factory=list)
+    selic_efetiva_diaria: list[PontoSerie] = Field(default_factory=list)
+    dolar_diario: list[PontoSerie] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _ordem_crescente(self) -> "SeriesMacro":
+        for nome, lista in self:
+            datas = [p.data for p in lista]
+            if any(a >= b for a, b in zip(datas, datas[1:])):
+                raise ValueError(f"series.{nome} deve estar em ordem crescente, sem datas repetidas")
+        return self
 
 
 # ---------------------------------------------------------------- juro real
@@ -269,6 +296,7 @@ class RespostaMacro(_Modelo):
     carteira: Carteira
     justificativa: Justificativa
     avisos_de_qualidade: list[str]
+    series: SeriesMacro = Field(default_factory=SeriesMacro)
 
     @model_validator(mode="after")
     def _fallback_usa_carteira_base(self) -> "RespostaMacro":
@@ -282,3 +310,31 @@ class RespostaMacro(_Modelo):
                     raise ValueError("com origem 'fallback' a carteira sugerida deve ser igual à base")
         return self
 
+
+
+# ---------------------------------------------------------------- simulador (R9.1)
+
+
+class EntradasSimulacao(_Modelo):
+    """Eco dos parâmetros recebidos (sem arredondar); opcionais ausentes = None."""
+
+    ipca_12m_pct: float = _Num
+    crescimento_ibcbr_pct: float = _Num
+    selic_efetiva_aa_pct: float = _Num
+    selic_esperada_pct: float | None = Field(default=None, allow_inf_nan=False)
+    meta_selic_pct: float | None = Field(default=None, allow_inf_nan=False)
+
+
+class BlocoCenarioSimulacao(_Modelo):
+    classificacao: Cenario
+
+
+class RespostaSimulacao(_Modelo):
+    entradas: EntradasSimulacao
+    cenario: BlocoCenarioSimulacao
+    carteira_base: Pesos
+    renda_fixa_preferencia: PreferenciaIndexador
+    juro_real_ex_post_pct: float = _Num
+    avisos: list[str]
+
+    _arred = _arredonda("juro_real_ex_post_pct", casas=2)

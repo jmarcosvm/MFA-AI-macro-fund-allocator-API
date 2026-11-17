@@ -58,6 +58,18 @@ RESUMO_MIN_LINHAS: int = 2
 RESUMO_MAX_LINHAS: int = 3
 
 
+# Simulador (R9.1): faixas aceitas nos parâmetros. ESCOLHA DIDÁTICA, sem fonte.
+SIM_IPCA_MIN, SIM_IPCA_MAX = -5.0, 30.0
+SIM_CRESCIMENTO_MIN, SIM_CRESCIMENTO_MAX = -20.0, 20.0
+SIM_SELIC_MIN, SIM_SELIC_MAX = 0.0, 50.0
+
+# Tamanho máximo de cada série do bloco `series` (R9.1).
+SERIE_MAX_IBCBR = 12
+SERIE_MAX_IPCA = 12
+SERIE_MAX_SELIC = 60
+SERIE_MAX_DOLAR = 120
+
+
 class Settings(BaseSettings):
     """Todas as chaves e nomes de modelo são opcionais; o app sobe sem .env."""
 
@@ -89,10 +101,12 @@ class Settings(BaseSettings):
 
     # Coleta do BCB: janela (em dias antes de hoje) de cada série e timeout por chamada.
     # Os valores são palpite inicial; o teste "internet" valida.
-    JANELA_IBCBR_DIAS: int = 365
-    JANELA_DOLAR_DIAS: int = 120
-    JANELA_SELIC_DIAS: int = 60
-    JANELA_IPCA_DIAS: int = 150
+    # R9.1: ampliadas para o bloco `series` (medido em 16/11/2026: IPCA 13 pontos, IBC-Br 15,
+    # Selic 62, dólar 138). Uma janela de 180 d do dólar deu HTTP 304 sem corpo (tratar na R9.1b).
+    JANELA_IBCBR_DIAS: int = 480
+    JANELA_DOLAR_DIAS: int = 200
+    JANELA_SELIC_DIAS: int = 90
+    JANELA_IPCA_DIAS: int = 400
     JANELA_META_SELIC_DIAS: int = 90
     BCB_TIMEOUT_SEGUNDOS: float = 10.0
 
