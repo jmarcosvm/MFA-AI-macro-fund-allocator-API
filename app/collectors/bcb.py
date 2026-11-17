@@ -4,12 +4,18 @@ Cada função devolve observações (data, valor) ordenadas por data, ascendente
 Qualquer falha vira BCBError, com a série e o motivo.
 """
 
+import logging
 from datetime import date, datetime, timedelta
 from typing import NamedTuple
 
 import httpx2
 
 from app.config import get_settings
+
+logger = logging.getLogger("mfa.bcb")
+
+# Total de chamadas quando o BCB responde 304 (a 1ª e até 2 novas tentativas).
+TENTATIVAS_304 = 3
 
 # Códigos das séries (SPEC.md §2).
 SERIES = {
@@ -74,21 +80,43 @@ def buscar_serie(
 
     `cliente` é opcional: os testes injetam um cliente com transporte simulado.
     """
-    params = {
-        "formato": "json",
-        "dataInicial": data_inicial.strftime(FORMATO_DATA_BCB),
-        "dataFinal": data_final.strftime(FORMATO_DATA_BCB),
-    }
     url = URL_BASE.format(codigo=codigo)
     proprio_cliente = cliente is None
     if proprio_cliente:
         cliente = httpx2.Client(timeout=timeout)
     try:
-        resposta = cliente.get(url, params=params)
-    except httpx2.TimeoutException:
-        raise BCBError(codigo, f"timeout após {timeout} s") from None
-    except httpx2.HTTPError as erro:
-        raise BCBError(codigo, f"falha de rede: {erro}") from None
+        # R9.1b: o BCB às vezes devolve 304 sem corpo para um par exato de datas (medido em
+        # 16 e 17/11/2026). Só o 304 gera nova tentativa, com dataInicial 1 e depois 2 dias
+        # antes (a URL muda; sem espera). Qualquer outro status ou erro segue como antes.
+        for tentativa in range(TENTATIVAS_304):
+            inicio = data_inicial - timedelta(days=tentativa)
+            if tentativa:
+                logger.info(
+                    "BCB série %s: HTTP 304; tentativa %d/%d com dataInicial %s",
+                    codigo,
+                    tentativa + 1,
+                    TENTATIVAS_304,
+                    inicio.strftime(FORMATO_DATA_BCB),
+                )
+            params = {
+                "formato": "json",
+                "dataInicial": inicio.strftime(FORMATO_DATA_BCB),
+                "dataFinal": data_final.strftime(FORMATO_DATA_BCB),
+            }
+            try:
+                resposta = cliente.get(url, params=params)
+            except httpx2.TimeoutException:
+                raise BCBError(codigo, f"timeout após {timeout} s") from None
+            except httpx2.HTTPError as erro:
+                raise BCBError(codigo, f"falha de rede: {erro}") from None
+            if resposta.status_code != 304:
+                break
+        else:
+            raise BCBError(
+                codigo,
+                f"HTTP 304 nas {TENTATIVAS_304} tentativas "
+                f"(dataInicial deslocada 0, 1 e 2 dias)",
+            )
     finally:
         if proprio_cliente:
             cliente.close()
