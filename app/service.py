@@ -22,6 +22,10 @@ from app.config import (
     LIMIAR_CRESCIMENTO_IBCBR,
     LIMIAR_IPCA_PCT,
     LIMITE_DESVIO_PP,
+    SERIE_MAX_DOLAR,
+    SERIE_MAX_IBCBR,
+    SERIE_MAX_IPCA,
+    SERIE_MAX_SELIC,
     get_settings,
 )
 from app.indicators import (
@@ -30,6 +34,7 @@ from app.indicators import (
     juro_real_ex_post,
     juro_real_projetado,
     o_que_mudaria,
+    ultimos_pontos,
     volatilidade_dolar_anualizada,
 )
 from app.llm import EntradaLLM, ResultadoLLM, gerar_analise
@@ -51,7 +56,9 @@ from app.schemas import (
     JuroReal,
     OQueMudaria,
     Pesos,
+    PontoSerie,
     RespostaMacro,
+    SeriesMacro,
 )
 
 FUSO_BRASIL = timezone(timedelta(hours=-3))
@@ -129,6 +136,14 @@ def _nota_focus(focus: ResultadoFocus) -> str | None:
         f"Focus: mediana semanal de {max(datas):%d/%m/%Y}; "
         "baseCalculo não documentado (usado 0)."
     )
+
+
+def _pontos(observacoes, quantidade: int) -> list[PontoSerie]:
+    return [PontoSerie(data=o.data, valor=o.valor) for o in ultimos_pontos(observacoes, quantidade)]
+
+
+def _pontos_janela(meses: tuple[date, ...], valores: tuple[float, ...]) -> list[PontoSerie]:
+    return [PontoSerie(data=d, valor=v) for d, v in zip(meses, valores)]
 
 
 def _sem_duplicatas(avisos: list[str]) -> list[str]:
@@ -224,10 +239,14 @@ def gerar_resposta(
         ibcbr=IbcbrIndicador(
             fonte=_fonte("ibcbr"),
             janela_recente=JanelaIbcbr(
-                media=cresc.media_recente, meses=_rotulos(cresc.meses_recente)
+                media=cresc.media_recente,
+                meses=_rotulos(cresc.meses_recente),
+                pontos=_pontos_janela(cresc.meses_recente, cresc.valores_recente),
             ),
             janela_anterior=JanelaIbcbr(
-                media=cresc.media_anterior, meses=_rotulos(cresc.meses_anterior)
+                media=cresc.media_anterior,
+                meses=_rotulos(cresc.meses_anterior),
+                pontos=_pontos_janela(cresc.meses_anterior, cresc.valores_anterior),
             ),
         ),
     )
@@ -247,6 +266,14 @@ def gerar_resposta(
             avisos.append(aviso)
     avisos += resultado_focus.avisos + avisos_regra
     avisos = _sem_duplicatas(avisos)
+
+    # R9.1: séries para gráficos. NÃO entram no prompt (EntradaLLM não as recebe).
+    series = SeriesMacro(
+        ibcbr_mensal=_pontos(ibcbr_obs, SERIE_MAX_IBCBR),
+        ipca_12m_mensal=_pontos(ipca_obs, SERIE_MAX_IPCA),
+        selic_efetiva_diaria=_pontos(selic_obs, SERIE_MAX_SELIC),
+        dolar_diario=_pontos(dolar_obs, SERIE_MAX_DOLAR),
+    )
 
     entrada = EntradaLLM(
         cenario=bloco_cenario,
@@ -273,4 +300,5 @@ def gerar_resposta(
         ),
         justificativa=analise.justificativa,
         avisos_de_qualidade=_sem_duplicatas(avisos + analise.avisos),
+        series=series,
     )
