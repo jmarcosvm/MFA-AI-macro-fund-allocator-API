@@ -106,6 +106,14 @@ Porta 8000 ocupada NÃO dá erro no Windows (o compose sobe sem erro): usar só 
 Gemini caiu para a NVIDIA em 2 de 3 medições locais (1º analyze de 17,5 a 29,8 s) e em 2 de 3 ciclos stop/start do diagnóstico (30,8 e 32,1 s). Aviso literal: "Gemini indisponível (tempo esgotado); usado NVIDIA NIM." Causa não investigada.
 Uso: subir `docker compose -p mfa up -d --build`; com limites `docker compose -p mfa -f docker-compose.yml -f docker-compose.free.yml up -d --build`; parar `docker compose -p mfa stop`; ligar `docker compose -p mfa start`; remover `docker compose -p mfa down`; reconstruir após mudar o código = subir de novo.
 
+## R9.1 — Back-end da interface: pontos, séries e simulador [x]
+Entrega: `pontos` (3 por janela) no IBC-Br; bloco `series` no /analyze (ibcbr 12, ipca 12m 12, selic 60, dólar 120; ordem crescente, sem arredondar); GET /api/v1/macro/simulate (determinístico, sem LLM/cache, 422 em português só nessa rota); janelas de coleta ampliadas (IBC-Br 480 d, IPCA 400 d, Selic 90 d, dólar 200 d).
+Resultado (16/11/2026): suíte 432 passed (383 + 49), 10 deselected; cada commit passa em worktree limpo (402, 432, 432). Container: séries com 12/12/60/120 pontos; média dos `pontos` x `media`: diferença 2,0e-5 e 3,7e-5 (media tem 4 casas; o critério de 1e-6 não vale).
+RISCO (R9.1b, não corrigido): o dólar com 180 d voltou HTTP 304 sem corpo (repetível em 16/11/2026); o coletor trata como BCBError, então o /analyze viraria 503 ou cache velho. Janelas medidas: IBC-Br 15, IPCA 13, Selic 62, dólar 138 pontos.
+Simulador: 3 cenários, fronteira (IPCA 4,5; crescimento 0) e 422 conferidos no container; avisos próprios (sem meta / sem Selic esperada) com a redação fixada em teste. Borda: o crescimento exibido (2 casas) pode classificar diferente do bruto (ex.: 0,004).
+Testes existentes alterados (só 2): test_bcb.py (janelas novas) e test_schemas.py (chaves novas `pontos`/`series`). O teste "internet" (tests/test_series_internet.py) não foi rodado.
+Pronto quando: as três entregas respondem no container e a suíte passa.
+
 ## R9 — Interface (v0) [ ]  (~1 h)
 Entrega: tela com cenário, carteira base x sugerida, juro real ex-post x projetado, "o que mudaria", IBC-Br clicável (3 meses), avisos de qualidade, estado de carregamento ("acordando o servidor, ~1 min (doc: 50 s ou mais; medido: 24 s, uma vez)").
 Pronto quando: front publicado consome a API pública.
