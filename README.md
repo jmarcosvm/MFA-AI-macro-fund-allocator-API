@@ -9,7 +9,7 @@ carteira-modelo. Protótipo de pipeline de dados e orquestração de IA, feito p
 - API pública: <https://mfa-api-4u7m.onrender.com> (Render, plano gratuito: dorme após 15 min sem tráfego; a primeira
   chamada pode levar de ~25 a 50 s)
 - Interface: <https://mfa-ai-macro-fund-allocator.vercel.app> (repositório
-  [MFA-AI-Macro-Fund-Allocator-70](https://github.com/jmarcosvm/MFA-AI-Macro-Fund-Allocator-70))
+  [MFA-AI-Macro-Fund-Allocator-Web](https://github.com/jmarcosvm/MFA-AI-Macro-Fund-Allocator-Web))
 
 ## Princípio de projeto
 
