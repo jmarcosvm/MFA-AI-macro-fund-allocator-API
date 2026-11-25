@@ -37,6 +37,7 @@ from app.schemas import (
 
 CHAVE_GEMINI = "SENTINELA-GEMINI-123"
 CHAVE_NVIDIA = "SENTINELA-NVIDIA-456"
+CHAVE_GROQ = "SENTINELA-GROQ-321"
 
 CENARIO = {
     "classificacao": "ESTAGFLACAO",
@@ -94,6 +95,11 @@ def settings(**kw) -> Settings:
         NVIDIA_NIM_API_KEY=CHAVE_NVIDIA,
         LLM_PRIMARY="modelo-gemini-teste",
         LLM_SECONDARY="dono/modelo-nvidia-teste",
+        GROQ_API_KEY=CHAVE_GROQ,
+        LLM_TERTIARY="dono/modelo-groq-teste",
+        # Os testes antigos cobrem a cadeia de dois provedores; os do Groq e da ordem
+        # passam LLM_ORDEM explicitamente.
+        LLM_ORDEM="gemini,nvidia_nim",
     )
     padrao.update(kw)
     return Settings(_env_file=None, **padrao)
@@ -142,6 +148,17 @@ def rodar(gemini=None, nvidia=None, cfg=None, ent=None, **kw):
         **kw,
     )
     return r, gem, nv
+
+
+def rodar3(gemini=None, nvidia=None, groq=None, ordem="gemini,nvidia_nim,groq", **kw_cfg):
+    """Cadeia com os três provedores falsos, na ordem dada."""
+    gem, nv, gq = Falso(gemini), Falso(nvidia), Falso(groq)
+    r = gerar_analise(
+        entrada(),
+        settings=settings(LLM_ORDEM=ordem, **kw_cfg),
+        chamadores={"gemini": gem, "nvidia_nim": nv, "groq": gq},
+    )
+    return r, gem, nv, gq
 
 
 # ---------------------------------------------------------------- sucesso e parser
@@ -373,7 +390,8 @@ def test_timeout_da_segunda_chamada_respeita_o_que_sobra_do_orcamento():
         relogio.t += 30.0
         raise ErroProvedor("tempo esgotado")
 
-    r, gem, nv = rodar(gemini=gasta_tempo, nvidia=resposta(), relogio=lambda: relogio.t)
+    cfg = settings(LLM_TIMEOUT_SEGUNDOS=25.0)
+    r, gem, nv = rodar(gemini=gasta_tempo, nvidia=resposta(), cfg=cfg, relogio=lambda: relogio.t)
     assert gem.chamadas[0]["timeout"] == 25.0
     assert nv.chamadas[0]["timeout"] == 15.0  # 45 - 30
     assert r.justificativa.provedor == "nvidia_nim"
@@ -516,3 +534,130 @@ def test_cadeia_completa_com_a_funcao_real_do_gemini_e_transporte_falso():
     r = gerar_analise(entrada(), settings=settings(), chamadores={"gemini": gemini})
     assert r.justificativa.provedor == "gemini"
     assert r.avisos == []
+
+
+# ---------------------------------------------------------------- Groq, ordem e timeouts
+
+
+def test_gemini_e_nvidia_falham_e_o_groq_responde():
+    r, gem, nv, gq = rodar3(
+        gemini=ErroProvedor("serviço indisponível (HTTP 503)"),
+        nvidia=ErroProvedor("requisição recusada (HTTP 404)"),
+        groq=resposta(),
+    )
+    assert r.justificativa.origem == "llm"
+    assert r.justificativa.provedor == "groq"
+    assert r.avisos == [
+        "Gemini indisponível (serviço indisponível (HTTP 503)); "
+        "NVIDIA NIM indisponível (requisição recusada (HTTP 404)); usado Groq."
+    ]
+    assert gq.chamadas[0]["modelo"] == "dono/modelo-groq-teste"
+    assert gq.chamadas[0]["chave"] == CHAVE_GROQ
+    assert [t.provedor for t in r.tentativas] == ["gemini", "nvidia_nim", "groq"]
+
+
+def test_os_tres_falham_vira_fallback_com_os_tres_no_aviso():
+    erro = ErroProvedor("tempo esgotado")
+    r, _, _, _ = rodar3(gemini=erro, nvidia=erro, groq=erro)
+    assert r.justificativa.origem == "fallback"
+    assert r.avisos == [
+        "Gemini indisponível (tempo esgotado); NVIDIA NIM indisponível (tempo esgotado); "
+        "Groq indisponível (tempo esgotado); texto de modelo fixo e carteira base."
+    ]
+
+
+def test_ordem_configurada_e_respeitada():
+    r, gem, nv, gq = rodar3(
+        gemini=resposta(), nvidia=ErroProvedor("falha de rede"), groq=resposta(),
+        ordem="nvidia_nim,groq,gemini",
+    )
+    assert r.justificativa.provedor == "groq"
+    assert len(nv.chamadas) == 1 and len(gq.chamadas) == 1
+    assert gem.chamadas == []  # o Groq respondeu antes de chegar ao Gemini
+
+
+def test_ordem_pode_omitir_provedor():
+    r, gem, nv, gq = rodar3(gemini=resposta(), nvidia=ErroProvedor("x"), groq=resposta(), ordem="groq")
+    assert r.justificativa.provedor == "groq"
+    assert gem.chamadas == [] and nv.chamadas == []
+
+
+def test_ordem_padrao_inclui_os_tres_provedores():
+    cfg = Settings(_env_file=None)
+    assert cfg.ordem_llm == ("gemini", "nvidia_nim", "groq")
+
+
+@pytest.mark.parametrize(
+    "valor, esperado",
+    [
+        ("", ("gemini", "nvidia_nim", "groq")),
+        ("  ", ("gemini", "nvidia_nim", "groq")),
+        (" NVIDIA_NIM , groq ", ("nvidia_nim", "groq")),
+        ("groq,", ("groq",)),
+    ],
+)
+def test_ordem_e_normalizada(valor, esperado):
+    assert Settings(_env_file=None, LLM_ORDEM=valor).ordem_llm == esperado
+
+
+@pytest.mark.parametrize("valor", ["gemini,openai", "gemini,gemini", "nvidia"])
+def test_ordem_invalida_impede_o_app_de_subir(valor):
+    with pytest.raises(ValueError, match="LLM_ORDEM"):
+        Settings(_env_file=None, LLM_ORDEM=valor)
+
+
+def test_provedores_da_config_e_da_cadeia_sao_os_mesmos():
+    from app.config import PROVEDORES_LLM
+    from app.llm import _CHAMADORES_PADRAO, _PROVEDORES
+
+    assert set(PROVEDORES_LLM) == set(_PROVEDORES) == set(_CHAMADORES_PADRAO)
+
+
+def test_timeout_padrao_e_15_segundos_por_provedor():
+    r, gem, nv, gq = rodar3(gemini=ErroProvedor("x"), nvidia=ErroProvedor("x"), groq=resposta())
+    assert [c.chamadas[0]["timeout"] for c in (gem, nv, gq)] == [15.0, 15.0, 15.0]
+
+
+def test_timeout_especifico_por_provedor_substitui_o_padrao():
+    r, gem, nv, gq = rodar3(
+        gemini=ErroProvedor("x"), nvidia=ErroProvedor("x"), groq=resposta(),
+        LLM_TIMEOUT_GEMINI_SEGUNDOS=8.0, LLM_TIMEOUT_GROQ_SEGUNDOS=10.0,
+    )
+    assert gem.chamadas[0]["timeout"] == 8.0
+    assert nv.chamadas[0]["timeout"] == 15.0  # sem específico: usa o padrão
+    assert gq.chamadas[0]["timeout"] == 10.0
+
+
+def test_tres_provedores_travados_cabem_no_orcamento_padrao():
+    """Pior caso com os padrões: 15 + 15 = 30 s gastos; o 3º ainda recebe 15 s dos 45."""
+    relogio = type("R", (), {"t": 0.0})()
+
+    def trava():
+        relogio.t += 15.0
+        raise ErroProvedor("tempo esgotado")
+
+    gem, nv, gq = Falso(trava), Falso(trava), Falso(resposta())
+    r = gerar_analise(
+        entrada(),
+        settings=settings(LLM_ORDEM="gemini,nvidia_nim,groq"),
+        chamadores={"gemini": gem, "nvidia_nim": nv, "groq": gq},
+        relogio=lambda: relogio.t,
+    )
+    assert gq.chamadas[0]["timeout"] == 15.0  # 45 - 30
+    assert r.justificativa.provedor == "groq"
+
+
+def test_groq_sem_chave_falha_rapido_e_a_cadeia_segue():
+    cfg = settings(LLM_ORDEM="groq,nvidia_nim", GROQ_API_KEY="")
+    r = gerar_analise(entrada(), settings=cfg, chamadores={"nvidia_nim": Falso(resposta())})
+    assert r.justificativa.provedor == "nvidia_nim"
+    assert r.avisos == ["Groq indisponível (chave ou modelo não configurados); usado NVIDIA NIM."]
+
+
+def test_json_mode_do_groq_vem_da_flag_propria():
+    _, _, nv, gq = rodar3(
+        gemini=ErroProvedor("x"), nvidia=ErroProvedor("x"), groq=resposta(),
+        LLM_SECONDARY_JSON_MODE=False, LLM_TERTIARY_JSON_MODE=True,
+    )
+    assert nv.chamadas[0]["json_mode"] is False
+    assert gq.chamadas[0]["json_mode"] is True

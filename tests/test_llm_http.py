@@ -11,9 +11,11 @@ import pytest
 
 from app.llm import (
     URL_GEMINI,
+    URL_GROQ,
     URL_NVIDIA,
     ErroProvedor,
     _chamar_gemini,
+    _chamar_groq,
     _chamar_nvidia,
 )
 
@@ -264,4 +266,71 @@ def test_nvidia_sem_chave_ou_modelo_falha_rapido_sem_rede():
         nvidia(t, chave="")
     with pytest.raises(ErroProvedor, match="chave ou modelo não configurados"):
         nvidia(t, modelo="  ")
+    assert reqs == []
+
+
+# ================================================================ Groq (mesmo formato da NVIDIA)
+
+
+def groq(t, modelo="dono/modelo-teste", chave=CHAVE, json_mode=False):
+    return _chamar_groq(modelo, "SISTEMA", "USUARIO", chave, 5.0, 123, json_mode, transporte=t)
+
+
+def test_groq_monta_url_header_bearer_e_corpo_com_max_completion_tokens():
+    reqs: list[httpx2.Request] = []
+    texto = groq(transporte(ok_nvidia('{"a": 1}'), reqs))
+    assert texto == '{"a": 1}'
+    (req,) = reqs
+    assert req.method == "POST"
+    assert str(req.url) == URL_GROQ == "https://api.groq.com/openai/v1/chat/completions"
+    assert req.headers["authorization"] == f"Bearer {CHAVE}"
+    assert CHAVE not in str(req.url)
+    corpo = json.loads(req.content)
+    assert corpo["model"] == "dono/modelo-teste"
+    assert [m["role"] for m in corpo["messages"]] == ["system", "user"]
+    assert corpo["max_completion_tokens"] == 123 and "max_tokens" not in corpo
+    assert corpo["temperature"] == 0.2 and corpo["stream"] is False
+    assert "response_format" not in corpo
+    assert CHAVE not in req.content.decode()
+
+
+def test_groq_response_format_so_com_a_flag_ligada():
+    reqs: list[httpx2.Request] = []
+    groq(transporte(ok_nvidia(), reqs), json_mode=True)
+    assert json.loads(reqs[0].content)["response_format"] == {"type": "json_object"}
+
+
+def test_groq_ignora_o_campo_reasoning_dos_modelos_de_raciocinio():
+    msg = {"role": "assistant", "content": "{}", "reasoning": "pensando..."}
+    r = httpx2.Response(200, json={"choices": [{"message": msg, "finish_reason": "stop"}]})
+    assert groq(transporte(r)) == "{}"
+
+
+def test_groq_truncada_bloqueada_e_vazia():
+    with pytest.raises(ErroProvedor, match="resposta truncada"):
+        groq(transporte(ok_nvidia("{parcial", finish="length")))
+    with pytest.raises(ErroProvedor, match="resposta bloqueada"):
+        groq(transporte(ok_nvidia("x", finish="content_filter")))
+    with pytest.raises(ErroProvedor, match="resposta vazia"):
+        groq(transporte(httpx2.Response(200, json={"choices": []})))
+
+
+@pytest.mark.parametrize(
+    "status, esperado",
+    [(429, "limite de uso"), (503, "serviço indisponível"), (401, "chave recusada"), (404, "requisição recusada")],
+)
+def test_groq_status_http_viram_categorias_fixas_sem_eco_do_corpo(status, esperado):
+    r = httpx2.Response(status, text=f"erro {CORPO_SECRETO} {CHAVE}")
+    with pytest.raises(ErroProvedor, match=esperado) as exc:
+        groq(transporte(r))
+    assert CORPO_SECRETO not in str(exc.value) and CHAVE not in str(exc.value)
+
+
+def test_groq_timeout_e_sem_chave():
+    req = httpx2.Request("POST", "https://exemplo.invalido")
+    with pytest.raises(ErroProvedor, match="tempo esgotado"):
+        groq(transporte(httpx2.ReadTimeout("lento", request=req)))
+    reqs: list = []
+    with pytest.raises(ErroProvedor, match="chave ou modelo não configurados"):
+        groq(transporte(ok_nvidia(), reqs), chave="")
     assert reqs == []

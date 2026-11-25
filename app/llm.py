@@ -2,7 +2,8 @@
 
 Recebe os números JÁ CALCULADOS (EntradaLLM) e, em UMA chamada, pede ao LLM: texto,
 resumo, narração do "o que mudaria" e a carteira sugerida. A cadeia é um laço NOSSO:
-Gemini -> NVIDIA NIM -> fallback determinístico. Erro de API, timeout, resposta
+Gemini -> NVIDIA NIM -> Groq -> fallback determinístico (ordem configurável em
+LLM_ORDEM). Erro de API, timeout, resposta
 truncada ou bloqueada, JSON inválido ou violação do contrato passam ao próximo; se todos
 falharem, sai a carteira base com texto de modelo fixo. Nunca levanta exceção ao chamador.
 
@@ -33,11 +34,15 @@ from app.schemas import (
     Pesos,
 )
 
-# URLs FIXAS no código (não configuráveis): a chave só pode ir para estes dois hosts.
+# URLs FIXAS no código (não configuráveis): a chave só pode ir para estes três hosts.
 # Gemini: documento de descoberta oficial v1beta e aistudio.google.com/docs (15/11/2026).
 URL_GEMINI = "https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
 # NVIDIA: docs.api.nvidia.com/nim/reference/llm-apis (15/11/2026).
 URL_NVIDIA = "https://integrate.api.nvidia.com/v1/chat/completions"
+# Groq: console.groq.com/docs/openai e /docs/api-reference (25/11/2026). Formato OpenAI;
+# max_tokens é obsoleto (usar max_completion_tokens); o raciocínio dos modelos gpt-oss
+# vem em message.reasoning, separado de message.content.
+URL_GROQ = "https://api.groq.com/openai/v1/chat/completions"
 
 TEMPERATURA = 0.2
 # Abaixo disto (segundos) não vale começar outra chamada: vai direto ao fallback.
@@ -341,21 +346,22 @@ def _chamar_gemini(
     return texto
 
 
-def _chamar_nvidia(
+def _chamar_chat_openai(
+    url: str,
+    campo_max_tokens: str,
     modelo: str,
     sistema: str,
     usuario: str,
     chave: str,
     timeout: float,
     max_tokens: int,
-    json_mode: bool = False,
-    *,
-    transporte=None,
+    json_mode: bool,
+    transporte,
 ) -> str:
-    """NVIDIA NIM (chat completions, formato OpenAI). Chave em Authorization: Bearer.
+    """Chat completions no formato OpenAI (NVIDIA NIM e Groq). Chave em Authorization: Bearer.
 
-    Suposições NÃO confirmadas em texto oficial (o teste "internet" prova): finish_reason
-    "length" = truncada e response_format json_object (só enviado se json_mode ligado).
+    finish_reason "length" = truncada; "content_filter" = bloqueada; response_format
+    json_object só é enviado com json_mode ligado.
     """
     if not chave or not isinstance(modelo, str) or not modelo.strip():
         raise ErroProvedor("chave ou modelo não configurados")
@@ -366,12 +372,12 @@ def _chamar_nvidia(
             {"role": "user", "content": usuario},
         ],
         "temperature": TEMPERATURA,
-        "max_tokens": max_tokens,
+        campo_max_tokens: max_tokens,
         "stream": False,
     }
     if json_mode:
         corpo["response_format"] = {"type": "json_object"}
-    dados = _post(URL_NVIDIA, {"Authorization": f"Bearer {chave}"}, corpo, timeout, transporte)
+    dados = _post(url, {"Authorization": f"Bearer {chave}"}, corpo, timeout, transporte)
     escolhas = dados.get("choices")
     if not isinstance(escolhas, list) or not escolhas:
         raise ErroProvedor("resposta vazia")
@@ -385,6 +391,42 @@ def _chamar_nvidia(
     if not isinstance(texto, str) or not texto.strip():
         raise ErroProvedor("resposta vazia")
     return texto
+
+
+def _chamar_nvidia(
+    modelo: str,
+    sistema: str,
+    usuario: str,
+    chave: str,
+    timeout: float,
+    max_tokens: int,
+    json_mode: bool = False,
+    *,
+    transporte=None,
+) -> str:
+    """NVIDIA NIM (chat completions, formato OpenAI; confirmado na prática na R6)."""
+    return _chamar_chat_openai(
+        URL_NVIDIA, "max_tokens", modelo, sistema, usuario, chave, timeout, max_tokens,
+        json_mode, transporte,
+    )
+
+
+def _chamar_groq(
+    modelo: str,
+    sistema: str,
+    usuario: str,
+    chave: str,
+    timeout: float,
+    max_tokens: int,
+    json_mode: bool = False,
+    *,
+    transporte=None,
+) -> str:
+    """Groq (chat completions, formato OpenAI; limite em max_completion_tokens)."""
+    return _chamar_chat_openai(
+        URL_GROQ, "max_completion_tokens", modelo, sistema, usuario, chave, timeout,
+        max_tokens, json_mode, transporte,
+    )
 
 
 # ---------------------------------------------------------------- parser e validação
@@ -519,10 +561,12 @@ _PROVEDORES: dict[str, tuple[str, Callable[[Settings], tuple[str, str, bool]]]] 
         "NVIDIA NIM",
         lambda s: (s.LLM_SECONDARY, s.NVIDIA_NIM_API_KEY, s.LLM_SECONDARY_JSON_MODE),
     ),
+    "groq": ("Groq", lambda s: (s.LLM_TERTIARY, s.GROQ_API_KEY, s.LLM_TERTIARY_JSON_MODE)),
 }
 _CHAMADORES_PADRAO: dict[str, Callable[..., str]] = {
     "gemini": _chamar_gemini,
     "nvidia_nim": _chamar_nvidia,
+    "groq": _chamar_groq,
 }
 
 
@@ -530,17 +574,20 @@ def gerar_analise(
     entrada: EntradaLLM,
     settings: Settings | None = None,
     chamadores: dict[str, Callable[..., str]] | None = None,
-    provedores: tuple[str, ...] = ("gemini", "nvidia_nim"),
+    provedores: tuple[str, ...] | None = None,
     relogio: Callable[[], float] = time.monotonic,
 ) -> ResultadoLLM:
     """Roda a cadeia de provedores e devolve o resultado (nunca levanta exceção).
 
+    `provedores` = ordem da cadeia; None = LLM_ORDEM das Settings.
     `chamadores` e `relogio` existem para os testes substituírem rede e tempo.
     """
+    cfg = settings or get_settings()
+    if provedores is None:
+        provedores = cfg.ordem_llm
     desconhecidos = [p for p in provedores if p not in _PROVEDORES]
     if desconhecidos:
         raise ValueError(f"provedor desconhecido: {desconhecidos}")
-    cfg = settings or get_settings()
     chamar = {**_CHAMADORES_PADRAO, **(chamadores or {})}
     sistema, usuario = montar_mensagens(entrada)
 
@@ -555,7 +602,7 @@ def gerar_analise(
             restante = cfg.LLM_ORCAMENTO_SEGUNDOS - (t0 - inicio)
             if restante < RESTANTE_MINIMO_SEGUNDOS:
                 raise ErroProvedor("orçamento de tempo esgotado")
-            timeout = min(cfg.LLM_TIMEOUT_SEGUNDOS, restante)
+            timeout = min(cfg.timeout_llm(nome), restante)
             texto = chamar[nome](
                 modelo, sistema, usuario, chave, timeout, cfg.LLM_MAX_TOKENS, json_mode
             )
