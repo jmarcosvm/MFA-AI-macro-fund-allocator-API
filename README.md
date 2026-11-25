@@ -167,6 +167,11 @@ Configuração em produção (25/11/2026), escolhida por medição (detalhes no 
   os produtos e servir usuários na UE, na Suíça ou no Reino Unido exige plano pago; os termos do Groq não foram lidos. O
   prompt leva só indicadores macro públicos já calculados, nenhum dado pessoal.
 
+## Como foi desenvolvido
+
+Desenvolvido no Cursor, com o Claude Code (pela API da Anthropic) como motor de IA. As decisões, as revisões e a
+aprovação de cada mudança foram minhas.
+
 ## Documentos do projeto
 
 - [`SPEC.md`](SPEC.md): regras, limiares, contrato JSON e decisões de arquitetura (fonte da verdade).
