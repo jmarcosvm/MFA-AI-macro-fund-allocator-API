@@ -67,8 +67,8 @@ curl "https://mfa-api-4u7m.onrender.com/api/v1/macro/simulate?ipca_12m_pct=4.63&
 2. **Indicadores** (`app/indicators.py`): crescimento do IBC-Br (média dos 3 últimos meses contra os 3 anteriores),
    volatilidade do dólar, juro real (Fisher) e distâncias aos limiares.
 3. **Regras** (`app/rules.py`): cenário, carteira base e preferência de indexador. Limiares e tabelas em `app/config.py`.
-4. **LLM** (`app/llm.py`): chamadas diretas por `httpx2`, uma função por provedor. Cadeia Gemini → NVIDIA NIM → fallback
-   sem LLM. A saída passa por validação de formato (Pydantic) e de negócio (soma = 1,0; desvio ≤ 15 p.p.).
+4. **LLM** (`app/llm.py`): chamadas diretas por `httpx2`, uma função por provedor. Cadeia Gemini → NVIDIA NIM → Groq →
+   fallback sem LLM (ordem configurável em `LLM_ORDEM`; timeout padrão de 15 s por provedor e 45 s no total). A saída passa por validação de formato (Pydantic) e de negócio (soma = 1,0; desvio ≤ 15 p.p.).
 5. **Contrato** (`app/schemas.py`) e **cache** (`app/cache.py`, `app/orquestrador.py`): o cache é em memória e é
    pré-aquecido ao iniciar o servidor.
 
@@ -110,7 +110,10 @@ Modelo em `.env.example`. O `.env` nunca vai para o git.
 | Variável | Para quê |
 |---|---|
 | `GEMINI_API_KEY`, `LLM_PRIMARY` | Provedor principal (nome do modelo sem prefixo). |
-| `NVIDIA_NIM_API_KEY`, `LLM_SECONDARY` | Provedor reserva (id do catálogo build.nvidia.com). |
+| `NVIDIA_NIM_API_KEY`, `LLM_SECONDARY` | Segundo provedor (id do catálogo build.nvidia.com). |
+| `GROQ_API_KEY`, `LLM_TERTIARY` | Terceiro provedor (id do modelo no Groq). |
+| `LLM_ORDEM` | Ordem da cadeia (padrão `gemini,nvidia_nim,groq`); pode omitir provedores. |
+| `LLM_TIMEOUT_SEGUNDOS`, `LLM_TIMEOUT_<PROVEDOR>_SEGUNDOS`, `LLM_ORCAMENTO_SEGUNDOS` | Timeout por chamada (padrão 15 s, com ajuste por provedor) e orçamento total da cadeia (45 s). |
 | `CACHE_TTL_SECONDS`, `CACHE_TTL_FALLBACK_SECONDS` | Vida do cache (padrão 21600 s e 900 s). |
 | `CORS_ORIGINS` | Origens permitidas, separadas por vírgula; vazio ou `*` libera qualquer origem. |
 | `JANELA_*_DIAS`, `BCB_TIMEOUT_SEGUNDOS` | Janelas de coleta e timeout do BCB (padrões em `app/config.py`). |
@@ -142,8 +145,9 @@ modelo ficam como variáveis de ambiente no painel, nunca na imagem.
 - A causa do HTTP 304 do BCB não foi confirmada; o deslocamento da data resolveu nas medições, mas só foi medido no dólar.
 - O log INFO das novas tentativas não aparece no container nem no Render (o app não configura logging).
 - Cache só em memória e disco efêmero: reiniciar ou dormir perde o cache. O plano gratuito do Render não é para produção.
-- Fontes de dados: BCB (licença ODbL; citar fonte e data). Os limites dos planos gratuitos do Gemini e da NVIDIA não
-  foram verificados.
+- Fontes de dados: BCB (licença ODbL; citar fonte e data). Os limites dos planos gratuitos do Gemini, da NVIDIA e do Groq
+  não foram verificados na conta (a página de limites do Groq cita 30 RPM e 1K RPD para os modelos de texto).
+- Em 25/11/2026 o Gemini devolveu HTTP 503 ("high demand") em todos os modelos testados; a cadeia caiu para a NVIDIA.
 
 ## Documentos do projeto
 

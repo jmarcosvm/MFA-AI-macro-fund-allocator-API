@@ -122,6 +122,11 @@ Suíte: 447 passed (432 + 15), 10 deselected; o commit passa em worktree limpo.
 Log INFO "mfa.bcb" (série, nova dataInicial, n/3) é emitido, mas NÃO aparece nos logs do container: o app não configura logging (só WARNING+ saem). Decisão: manter.
 Causa do 304 NÃO confirmada (hipótese: cache do BCB por par de datas); medido só no dólar. Render não verificado.
 
+## R9.2 — Terceiro provedor (Groq), ordem configurável e timeout por provedor [x]
+Motivo (25/11/2026): em produção o Gemini dava 503 ("high demand") e a NVIDIA 404 (id do modelo errado no Render, corrigido pelo João). Medição local, cadeia real, 2 rodadas por modelo: Gemini 503 em 3.1-flash-lite, 3.5-flash-lite, flash-lite-latest, 3.8-flash e gemma-4-31b; 3.6-flash tempo esgotado; 2.5-flash-lite 404. NVIDIA: nemotron-3.5-bolt-e4b OK 4,4 s; minimax-m3.1-flash OK 11 a 12 s; lightning-30b, glm-5.3-flash, mistral-large-4 e step-5-preview tempo esgotado ou truncada; gemma-3-12b 404.
+Entrega: Groq como terceiro provedor (GROQ_API_KEY, LLM_TERTIARY, LLM_TERTIARY_JSON_MODE), reaproveitando a chamada no formato OpenAI da NVIDIA; LLM_ORDEM (ordem da cadeia, validada ao subir); timeout padrão 15 s com LLM_TIMEOUT_<PROVEDOR>_SEGUNDOS; orçamento 45 s mantido. Sem dependência nova.
+Pendente: chave e modelo do Groq no .env e no Render; rodar o teste "internet" do Groq.
+
 ## R9 — Interface (v0) [ ]  (~1 h)
 Entrega: tela com cenário, carteira base x sugerida, juro real ex-post x projetado, "o que mudaria", IBC-Br clicável (3 meses), avisos de qualidade, estado de carregamento ("acordando o servidor, ~1 min (doc: 50 s ou mais; medido: 24 s, uma vez)").
 Pronto quando: front publicado consome a API pública.
