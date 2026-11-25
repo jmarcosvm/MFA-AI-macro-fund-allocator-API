@@ -35,8 +35,8 @@ e existe cache antigo, a resposta vem com aviso de dados desatualizados.
   com as duas janelas de 3 meses (`media`, `meses` e `pontos` com data e valor).
 - `juro_real`: ex-post (Selic efetiva x IPCA 12m) e projetado em 12 meses (Focus); o Focus é informativo e não entra na
   regra do cenário.
-- `carteira`: `base` (do código), `sugerida` (ajuste do LLM, até ±15 p.p. por classe, validado pelo código) e a
-  preferência de indexador da renda fixa (`PREFIXADA` ou `POSFIXADA`).
+- `carteira`: `base` (do código), `sugerida` (ajuste ilustrativo do LLM, validado pelo código; 15 p.p. por classe é o
+  teto, e o LLM pode ajustar menos ou manter a base) e a preferência de indexador da renda fixa (`PREFIXADA` ou `POSFIXADA`).
 - `justificativa`: texto, resumo de 2 a 3 linhas e narração do "o que mudaria"; `origem` (`llm` ou `fallback`) e `provedor`.
 - `series`: IBC-Br (12 pontos), IPCA 12m (12), Selic efetiva (60) e dólar (120), em ordem crescente de data.
 - `avisos_de_qualidade`: defasagem do IBC-Br, nota do Focus, falhas de provedor etc.
@@ -68,7 +68,8 @@ curl "https://mfa-api-4u7m.onrender.com/api/v1/macro/simulate?ipca_12m_pct=4.63&
    volatilidade do dólar, juro real (Fisher) e distâncias aos limiares.
 3. **Regras** (`app/rules.py`): cenário, carteira base e preferência de indexador. Limiares e tabelas em `app/config.py`.
 4. **LLM** (`app/llm.py`): chamadas diretas por `httpx2`, uma função por provedor. Cadeia Gemini → NVIDIA NIM → Groq →
-   fallback sem LLM (ordem configurável em `LLM_ORDEM`; timeout padrão de 15 s por provedor e 45 s no total). A saída passa por validação de formato (Pydantic) e de negócio (soma = 1,0; desvio ≤ 15 p.p.).
+   fallback sem LLM (ordem configurável em `LLM_ORDEM`; timeout padrão de 15 s por provedor e 45 s no total). A saída passa por validação de formato (Pydantic) e de negócio (soma = 1,0; desvio ≤ 15 p.p.); se
+   reprovar, o código não corrige os pesos: passa ao próximo provedor.
 5. **Contrato** (`app/schemas.py`) e **cache** (`app/cache.py`, `app/orquestrador.py`): o cache é em memória e é
    pré-aquecido ao iniciar o servidor.
 
@@ -132,6 +133,16 @@ Testes de regra usam números fixos; os que tocam a rede ficam marcados com `int
 Render (Docker, plano gratuito), com deploy automático a cada merge na `main`. Health check em `/health`. Chaves e nomes de
 modelo ficam como variáveis de ambiente no painel, nunca na imagem.
 
+Configuração em produção (25/11/2026), escolhida por medição (detalhes no `roadmap.md`, R9.2 e R9.3):
+
+| Provedor | Modelo | Medido |
+|---|---|---|
+| NVIDIA NIM | `nvidia/nemotron-3.5-bolt-e4b` | ~5 s; 10/10 no contrato com o prompt atual |
+| Groq | `openai/gpt-oss-120b` | ~3 s; passou no contrato em todas as chamadas medidas |
+| Gemini | `gemini-3.1-flash-lite` | HTTP 503 ou tempo esgotado em todas as tentativas do dia |
+
+`LLM_ORDEM=nvidia_nim,groq,gemini` enquanto o Gemini estiver instável; sem a variável, volta a ordem padrão.
+
 ## Limitações
 
 - O juro real ex-post usa a inflação passada como aproximação.
@@ -147,7 +158,14 @@ modelo ficam como variáveis de ambiente no painel, nunca na imagem.
 - Cache só em memória e disco efêmero: reiniciar ou dormir perde o cache. O plano gratuito do Render não é para produção.
 - Fontes de dados: BCB (licença ODbL; citar fonte e data). Os limites dos planos gratuitos do Gemini, da NVIDIA e do Groq
   não foram verificados na conta (a página de limites do Groq cita 30 RPM e 1K RPD para os modelos de texto).
-- Em 25/11/2026 o Gemini devolveu HTTP 503 ("high demand") em todos os modelos testados; a cadeia caiu para a NVIDIA.
+- Em 25/11/2026 o Gemini devolveu HTTP 503 ("high demand") em todos os modelos testados; por isso a produção usa a
+  NVIDIA primeiro (`LLM_ORDEM`).
+- O texto do LLM não tem checagem automática dos números citados nem do vocabulário (já apareceu "meta" onde o código diz
+  "limiar"); o código valida só o formato, a soma e o limite da carteira.
+- O modelo da NVIDIA é pequeno e às vezes mantém a carteira base (3 de 10 respostas nas medições de 25/11/2026).
+- Planos gratuitos dos LLMs: o da NVIDIA é para protótipo e avaliação; no do Gemini os dados podem ser usados para melhorar
+  os produtos e servir usuários na UE, na Suíça ou no Reino Unido exige plano pago; os termos do Groq não foram lidos. O
+  prompt leva só indicadores macro públicos já calculados, nenhum dado pessoal.
 
 ## Documentos do projeto
 
