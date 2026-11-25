@@ -9,6 +9,8 @@ chave. Estes testes provam as suposições que a doc oficial não confirma:
 - Gemini: o formato generationConfig.responseFormat (se der HTTP 400, trocar na função
   isolada _chamar_gemini).
 - NVIDIA NIM: finish_reason e response_format (LLM_SECONDARY_JSON_MODE).
+- Groq: o modelo escolhido responde dentro do contrato e aceita response_format
+  (LLM_TERTIARY_JSON_MODE).
 """
 
 import time
@@ -20,6 +22,7 @@ from app.config import get_settings
 from app.llm import (
     ErroProvedor,
     _chamar_gemini,
+    _chamar_groq,
     _chamar_nvidia,
     extrair_json,
     gerar_analise,
@@ -122,3 +125,37 @@ def test_nvidia_nim_aceita_response_format():
     except ErroProvedor as e:
         situacao = f"aceito, mas a resposta não validou ({e})"
     print(f"\n[nvidia_nim response_format] {situacao} ({time.perf_counter() - inicio:.2f}s)")
+
+
+def test_groq_real():
+    cfg = get_settings()
+    if not cfg.GROQ_API_KEY or not cfg.LLM_TERTIARY:
+        pytest.skip("Defina GROQ_API_KEY e LLM_TERTIARY (id do modelo no Groq) no .env para rodar.")
+    r = _rodar_um_provedor("groq", _chamar_groq, "groq")
+    assert r.justificativa.origem == "llm", f"Groq não respondeu dentro do contrato: {r.avisos}"
+    assert r.justificativa.provedor == "groq"
+
+
+def test_groq_aceita_response_format():
+    """Informativo: diz se o modelo do Groq aceita response_format (decide a flag
+    LLM_TERTIARY_JSON_MODE). Não falha se não aceitar."""
+    cfg = get_settings()
+    if not cfg.GROQ_API_KEY or not cfg.LLM_TERTIARY:
+        pytest.skip("Defina GROQ_API_KEY e LLM_TERTIARY (id do modelo no Groq) no .env para rodar.")
+    sistema, usuario = montar_mensagens(entrada())
+    inicio = time.perf_counter()
+    try:
+        texto = _chamar_groq(
+            cfg.LLM_TERTIARY, sistema, usuario, cfg.GROQ_API_KEY,
+            cfg.timeout_llm("groq"), cfg.LLM_MAX_TOKENS, True,
+        )
+    except ErroProvedor as e:
+        print(f"\n[groq response_format] NÃO aceito/sem resposta: {e} ({time.perf_counter() - inicio:.2f}s)")
+        print("[groq response_format] mantenha LLM_TERTIARY_JSON_MODE=false")
+        return
+    try:
+        validar_resposta(extrair_json(texto), entrada(), "groq")
+        situacao = "aceito e a resposta validou no contrato"
+    except ErroProvedor as e:
+        situacao = f"aceito, mas a resposta não validou ({e})"
+    print(f"\n[groq response_format] {situacao} ({time.perf_counter() - inicio:.2f}s)")
