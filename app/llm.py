@@ -135,8 +135,9 @@ REGRAS INEGOCIÁVEIS
 
 CARTEIRA SUGERIDA
 - Parta da carteira base fornecida. Os pesos são FRAÇÕES escritas com PONTO decimal no JSON: 0.55 significa 55%; nunca escreva 55.
-- Os três pesos (renda_fixa, fundos_cambiais, renda_variavel) devem somar exatamente 1.0 e ficar entre 0 e 1.
-- Cada classe pode se afastar da base em no máximo o limite informado (em pontos percentuais; 15 p.p. = 0.15 em fração). Se não houver bom motivo para ajustar, devolva a própria base.
+- Os três pesos (renda_fixa, fundos_cambiais, renda_variavel) devem somar exatamente 1.0 e ficar entre 0 e 1. Ao ajustar, o que você somar a uma classe deve ser tirado das outras na mesma quantidade (ex.: +0.10 em uma = -0.05 e -0.05 nas outras duas). Confira a soma antes de responder.
+- Cada classe pode se afastar da base em no máximo o limite informado (em pontos percentuais; 15 p.p. = 0.15 em fração). O limite é um TETO, não um valor a atingir: ajustes menores (por exemplo, 5 ou 10 p.p.) são válidos. Não deixe de ajustar só porque o ajuste ficaria abaixo do limite.
+- Decida o ajuste pelos dados fornecidos (cenário, juro real, volatilidade do dólar, preferência de indexador). Se eles não justificarem mudança, devolva a própria base e diga no "texto" qual dado levou a manter.
 - No "texto", justifique cada classe que você mudou usando apenas os números fornecidos. A preferência de indexador da renda fixa e o cenário são decisões do código: você só os explica.
 
 FORMATO DE SAÍDA
@@ -242,7 +243,7 @@ def montar_mensagens(entrada: EntradaLLM) -> tuple[str, str]:
         "",
         f"Carteira base (frações com ponto decimal): {_linha_pesos(entrada.carteira_base)}",
         (
-            f"Limite de desvio por classe: {entrada.limite_desvio_pp:g} p.p. "
+            f"Limite de desvio por classe (teto, não meta): {entrada.limite_desvio_pp:g} p.p. "
             f"(no JSON, em fração: {entrada.limite_desvio_pp / 100:.2f})"
         ),
         "",
